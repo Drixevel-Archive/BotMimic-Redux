@@ -37,7 +37,7 @@ enum BMFileHeader {
  * @param subdir	The subdirectory to organize records physically. This isn't used or retrieved back anywhere, just to better manage files by hand. /data/botmimic/%CATEGORY%/%MAP_NAME%/%SUBDIR%/stuff.rec
  * @noreturn
  */
-native BotMimic_StartRecording(client, const String:name[], const String:category[]="", const String:subdir[]="");
+native void BotMimic_StartRecording(int client, const char[] name, const char[] category = "", const char[] subdir = "");
 
 /**
  * Pause recording the current record.
@@ -46,7 +46,7 @@ native BotMimic_StartRecording(client, const String:name[], const String:categor
  * @noreturn
  * @error			Invalid client index, client not recording or recording already paused.
  */
-native BotMimic_PauseRecording(client);
+native void BotMimic_PauseRecording(int client);
 
 /**
  * Resume recording the current record.
@@ -55,7 +55,7 @@ native BotMimic_PauseRecording(client);
  * @noreturn
  * @error				Invalid client index, client not recording or record not paused.
  */
-native BotMimic_ResumeRecording(client);
+native void BotMimic_ResumeRecording(int client);
 
 /**
  * Check whether a client is currently paused recording a record.
@@ -64,7 +64,7 @@ native BotMimic_ResumeRecording(client);
  * @return			True if recording is paused, false otherwise.
  * @error			Invalid client index or client not recording.
  */
-native bool:BotMimic_IsRecordingPaused(client);
+native bool BotMimic_IsRecordingPaused(int client);
 
 /**
  * Stop recording and save or discard the record
@@ -73,7 +73,7 @@ native bool:BotMimic_IsRecordingPaused(client);
  * @param save		Save the record (true) or discard (false)
  * @noreturn
  */
-native BotMimic_StopRecording(client, bool:save=true);
+native void BotMimic_StopRecording(int client, bool save = true);
 
 /**
  * Save the current frame with the given name as bookmark.
@@ -84,7 +84,7 @@ native BotMimic_StopRecording(client, bool:save=true);
  * @noreturn
  * @error	Client not recording
  */
-native BotMimic_SaveBookmark(client, const String:name[]);
+native void BotMimic_SaveBookmark(int client, const char[] name);
 
 /**
  * Deletes a record and does some checks, that the file is really a record.
@@ -92,7 +92,7 @@ native BotMimic_SaveBookmark(client, const String:name[]);
  * @param path		The Path to the .rec recording file to delete.
  * @return			Number of bots, which were mimicing this record or -1 on error (file not found/invalid)
  */
-native BotMimic_DeleteRecord(const String:path[]);
+native int BotMimic_DeleteRecord(const char[] path);
 
 /**
  * Is the player currently recording something?
@@ -100,7 +100,7 @@ native BotMimic_DeleteRecord(const String:path[]);
  * @param client	The client to check
  * @return			true, if player is recording, false otherwise
  */
-native bool:BotMimic_IsPlayerRecording(client);
+native bool BotMimic_IsPlayerRecording(int client);
 
 /**
  * Is the player currently mimicing something?
@@ -108,7 +108,7 @@ native bool:BotMimic_IsPlayerRecording(client);
  * @param client	The client to check
  * @return			true, if the player is mimicing, false otherwise
  */
-native bool:BotMimic_IsPlayerMimicing(client);
+native bool BotMimic_IsPlayerMimicing(int client);
 
 /**
  * Get the path to the record file this player is currently mimicing.
@@ -118,7 +118,7 @@ native bool:BotMimic_IsPlayerMimicing(client);
  * @param maxlen	The maximal length of the path
  * @noreturn
  */
-native BotMimic_GetRecordPlayerMimics(client, String:path[], maxlen);
+native void BotMimic_GetRecordPlayerMimics(int client, char[] path, int maxlen);
 
 /**
  * Let a client start to mimic a record from a file.
@@ -128,7 +128,7 @@ native BotMimic_GetRecordPlayerMimics(client, String:path[], maxlen);
  * @param start		The starting time in seconds.
  * @return			BM_NoError if all went smooth, see BMError definition.
  */
-native BMError:BotMimic_PlayRecordFromFile(client, const String:path[], int start = 0);
+native BMError BotMimic_PlayRecordFromFile(int client, const char[] path, int start = 0);
 
 /**
  * Let a client start to mimic a record by providing the record name.
@@ -139,7 +139,7 @@ native BMError:BotMimic_PlayRecordFromFile(client, const String:path[], int star
  * @param start		The starting time in seconds.
  * @return			BM_NoError if all went smooth, see BMError definition.
  */
-native BMError:BotMimic_PlayRecordByName(client, const String:name[], int start = 0);
+native BMError BotMimic_PlayRecordByName(int client, const char[] name, int start = 0);
 
 /**
  * Have a bot restart the record he's currently playing from the beginning.
@@ -147,7 +147,7 @@ native BMError:BotMimic_PlayRecordByName(client, const String:name[], int start 
  * @param client   The client, who should start over with the record he's currently mimicing.
  * @noreturn
  */
-native BotMimic_ResetPlayback(client);
+native void BotMimic_ResetPlayback(int client);
 
 /**
  * Jump the the frame where this bookmark was set in the record.
@@ -157,7 +157,7 @@ native BotMimic_ResetPlayback(client);
  * @param name		The name of the bookmark saved during recording using BotMimic_SaveBookmark
  * @noreturn
  */
-native BotMimic_GoToBookmark(client, const String:name[]);
+native void BotMimic_GoToBookmark(int client, const char[] name);
 
 /**
  * Stops a player from mimicing a record.
@@ -165,7 +165,7 @@ native BotMimic_GoToBookmark(client, const String:name[]);
  * @param client	The client who should stop mimicing
  * @noreturn
  */
-native BotMimic_StopPlayerMimic(client);
+native void BotMimic_StopPlayerMimic(int client);
 
 /**
  * Get the Handle to a sorted adt_array, containing a list of paths to all loaded record files.
@@ -174,7 +174,7 @@ native BotMimic_StopPlayerMimic(client);
  *
  * @return Handle to sorted adt_array containing all paths to records
  */
-native Handle:BotMimic_GetLoadedRecordList();
+native Handle BotMimic_GetLoadedRecordList();
 
 /**
  * Get the Handle to a sorted adt_array, containing a list of categorys.
@@ -183,7 +183,7 @@ native Handle:BotMimic_GetLoadedRecordList();
  *
  * @return Handle to sorted adt_array containing all categories.
  */
-native Handle:BotMimic_GetLoadedRecordCategoryList();
+native Handle BotMimic_GetLoadedRecordCategoryList();
 
 /**
  * Get the header information of a record. This includes the record name.
@@ -192,7 +192,7 @@ native Handle:BotMimic_GetLoadedRecordCategoryList();
  * @param iFileHeader	An array to store the file header in.
  * @return			BM_NoError if all went smooth, see BMError definition.
  */
-native BMError:BotMimic_GetFileHeaders(const String:path[], iFileHeader[BMFileHeader], size=_:BMFileHeader);
+native BMError BotMimic_GetFileHeaders(const char[] path, iFileHeader[BMFileHeader], size=_:BMFileHeader);
 
 /**
  * Get the category of a record.
@@ -202,7 +202,7 @@ native BMError:BotMimic_GetFileHeaders(const String:path[], iFileHeader[BMFileHe
  * @param maxlen		The maximal length of the category buffer.
  * @return				true if category of file found, false otherwise
  */
-native bool:BotMimic_GetFileCategory(const String:path[], String:category[], maxlen);
+native bool BotMimic_GetFileCategory(const char[] path, char[] category, int maxlen);
 
 /**
  * Change the name of a record. This doesn't change the filename, but the stored record name inside the file. (BMTP_recordName)
@@ -211,7 +211,7 @@ native bool:BotMimic_GetFileCategory(const String:path[], String:category[], max
  * @param name	The new name of the record
  * @return			BM_NoError if all went smooth, see BMError definition.
  */
-native BMError:BotMimic_ChangeRecordName(const String:path[], String:name[]);
+native BMError BotMimic_ChangeRecordName(const char[] path, char[] name);
 
 /**
  * Get a list of all bookmarks stored in this record as an adt_array.
@@ -221,7 +221,7 @@ native BMError:BotMimic_ChangeRecordName(const String:path[], String:name[]);
  * @param bookmarks	The handle where the bookmark array will be stored in.
  * @return			BM_NoError if all went smooth, see BMError definition.
  */
-native BMError:BotMimic_GetRecordBookmarks(const String:path[], &Handle:bookmarks);
+native BMError BotMimic_GetRecordBookmarks(const char[] path, Handle &bookmarks);
 
 /**
  * Called when a player starts recording.
@@ -234,7 +234,7 @@ native BMError:BotMimic_GetRecordBookmarks(const String:path[], &Handle:bookmark
  * @param path		The path to the category folder
  * @return			>= Plugin_Handled to abort recording or Plugin_Continue to let it pass and start recording.
  */
-forward Action:BotMimic_OnStartRecording(client, String:name[], String:category[], String:subdir[], String:path[]);
+forward Action BotMimic_OnStartRecording(int client, char[] name, char[] category, char[] subdir, char[] path);
 
 /**
  * Called when recording a record is paused or resumed.
@@ -243,7 +243,7 @@ forward Action:BotMimic_OnStartRecording(client, String:name[], String:category[
  * @param paused	True when the recording was paused, false when it was unpaused
  * @noreturn
  */
-forward BotMimic_OnRecordingPauseStateChanged(client, bool:paused);
+forward void BotMimic_OnRecordingPauseStateChanged(int client, bool paused);
 
 /**
  * Called when a bookmark is saved while the client is recording.
@@ -252,7 +252,7 @@ forward BotMimic_OnRecordingPauseStateChanged(client, bool:paused);
  * @param bookmark	The name of the saved bookmark.
  * @noreturn
  */
-forward BotMimic_OnRecordingBookmarkSaved(client, const String:bookmark[]);
+forward void BotMimic_OnRecordingBookmarkSaved(int client, const char[] bookmark);
 
 /**
  * Called when a player stops recording.
@@ -266,7 +266,7 @@ forward BotMimic_OnRecordingBookmarkSaved(client, const String:bookmark[]);
  * @param save			Set to true, if the record should be stored to disk, or false to discard.
  * @return				>= Plugin_Handled to continue recording, Plugin_Continue to let it stop.
  */
-forward Action:BotMimic_OnStopRecording(client, String:name[], String:category[], String:subdir[], String:path[], &bool:save);
+forward Action BotMimic_OnStopRecording(int client, char[] name, char[] category, char[] subdir, char[] path, bool &save);
 
 /**
  * Called when a record was saved to file.
@@ -278,7 +278,7 @@ forward Action:BotMimic_OnStopRecording(client, String:name[], String:category[]
  * @param file			The actual path to the saved .rec file.
  * @noreturn
  */
-forward BotMimic_OnRecordSaved(client, String:name[], String:category[], String:subdir[], String:file[]);
+forward void BotMimic_OnRecordSaved(int client, char[] name, char[] category, char[] subdir, char[] file);
 
 /**
  * Called when a record was deleted.
@@ -286,9 +286,9 @@ forward BotMimic_OnRecordSaved(client, String:name[], String:category[], String:
  * @param name		The name of the record (stored in file header)
  * @param category	The category of the file. (If it wasn't loaded before it defaults to "default".)
  * @param path		The path to the deleted file.
- * @noreturn;
+ * @noreturn
  */
-forward BotMimic_OnRecordDeleted(String:name[], String:category[], String:path[]);
+forward void BotMimic_OnRecordDeleted(char[] name, char[] category, char[] path);
 
 /**
  * Called when a player starts to mimic a record
@@ -299,7 +299,7 @@ forward BotMimic_OnRecordDeleted(String:name[], String:category[], String:path[]
  * @param path			The path to the record file.
  * @return 					>= Plugin_Handled to stop the player from mimicing, Plugin_Continue to allow
  */
-forward Action:BotMimic_OnPlayerStartsMimicing(client, String:name[], String:category[], String:path[]);
+forward Action BotMimic_OnPlayerStartsMimicing(int client, char[] name, char[] category, char[] path);
 
 /**
  * Called when a player stops mimicing a record.
@@ -310,7 +310,7 @@ forward Action:BotMimic_OnPlayerStartsMimicing(client, String:name[], String:cat
  * @param path			The path to the record file.
  * @noreturn
  */
-forward BotMimic_OnPlayerStopsMimicing(client, String:name[], String:category[], String:path[]);
+forward void BotMimic_OnPlayerStopsMimicing(int client, char[] name, char[] category, char[] path);
 
 /**
  * Called everytime a mimicing player starts to mimic the record again from the beginning,
@@ -319,7 +319,7 @@ forward BotMimic_OnPlayerStopsMimicing(client, String:name[], String:category[],
  * @param client		The mimicing client
  * @noreturn
  */
-forward BotMimic_OnPlayerMimicLoops(client);
+forward void BotMimic_OnPlayerMimicLoops(int client);
 
 /**
  * Called when a bookmark is reached during playback of a record.
@@ -328,7 +328,7 @@ forward BotMimic_OnPlayerMimicLoops(client);
  * @param bookmark	The name of the bookmark.
  * @noreturn
  */
-forward BotMimic_OnPlayerMimicBookmark(client, const String:bookmark[]);
+forward void BotMimic_OnPlayerMimicBookmark(int client, const char[] bookmark);
 
 /**
  * Translate an error id to a human readable string
@@ -338,30 +338,20 @@ forward BotMimic_OnPlayerMimicBookmark(client, const String:bookmark[]);
  * @param maxlen	The maximal length of the error message string
  * @noreturn
  */
-stock BotMimic_GetErrorString(BMError:error, String:str[], maxlen)
+stock void BotMimic_GetErrorString(BMError error, char[] str, int maxlen)
 {
 	switch(error)
 	{
 		case BM_BadClient:
-		{
 			strcopy(str, maxlen, "Invalid client index.");
-		}
 		case BM_FileNotFound:
-		{
 			strcopy(str, maxlen, "File not found.");
-		}
 		case BM_NewerBinaryVersion:
-		{
 			strcopy(str, maxlen, "The file was recorded with a newer version of Bot Mimic and can't be played.");
-		}
 		case BM_BadFile:
-		{
 			strcopy(str, maxlen, "The file is not a record. Bad format.");
-		}
 		case BM_NoError:
-		{
-			strcopy(str, maxlen, "");
-		}
+			strcopy(str, maxlen, "No errors found.");
 	}
 }
 

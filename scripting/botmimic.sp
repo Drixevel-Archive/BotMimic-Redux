@@ -5,6 +5,7 @@
  *
  * Changelog post-2.1 by Drixevel:
  * 2.1.1r	-	11.08.2019: Forked, Removed SMLIB support.
+ * 2.1.2r	-	16.08.2019: Updated syntax, added a delay for recordings to be finished on death.
  * 
  * Changelog pre-2.1 by Peace-Maker:
  * 2.0   - 22.07.2013: Released rewrite
@@ -22,13 +23,14 @@
 #undef REQUIRE_EXTENSIONS
 #include <dhooks>
 
-#define PLUGIN_VERSION "2.1.1r"
+#define PLUGIN_VERSION "2.1.2r"
 
 #define BM_MAGIC 0xdeadbeef
 
-// New in 0x02: bookmarkCount and bookmarks list
+// New in 0x02: bookmarkCount and bookmarks list.
 #define BINARY_FORMAT_VERSION 0x02
 
+// Path for the recordings to be saved.
 #define DEFAULT_RECORD_FOLDER "data/botmimic/"
 
 // Flags set in FramInfo.additionalFields to inform, that there's more info afterwards.
@@ -52,13 +54,13 @@ enum FrameInfo {
 #define AT_ANGLES 1
 #define AT_VELOCITY 2
 #define AT_FLAGS 3
+
 enum AdditionalTeleport {
 	Float:atOrigin[3],
 	Float:atAngles[3],
 	Float:atVelocity[3],
 	atFlags
 }
-
 
 enum FileHeader {
 	FH_binaryFormatVersion = 0,
@@ -85,58 +87,58 @@ enum BookmarkWhileMimicing {
 };
 
 // Where did he start recording. The bot is teleported to this position on replay.
-new Float:g_fInitialPosition[MAXPLAYERS+1][3];
-new Float:g_fInitialAngles[MAXPLAYERS+1][3];
+float g_fInitialPosition[MAXPLAYERS + 1][3];
+float g_fInitialAngles[MAXPLAYERS + 1][3];
 // Array of frames
-new Handle:g_hRecording[MAXPLAYERS+1];
-new Handle:g_hRecordingAdditionalTeleport[MAXPLAYERS+1];
-new Handle:g_hRecordingBookmarks[MAXPLAYERS+1];
-new g_iCurrentAdditionalTeleportIndex[MAXPLAYERS+1];
+Handle g_hRecording[MAXPLAYERS + 1];
+Handle g_hRecordingAdditionalTeleport[MAXPLAYERS + 1];
+Handle g_hRecordingBookmarks[MAXPLAYERS + 1];
+int g_iCurrentAdditionalTeleportIndex[MAXPLAYERS + 1];
 // Is the recording currently paused?
-new bool:g_bRecordingPaused[MAXPLAYERS+1];
-new bool:g_bSaveFullSnapshot[MAXPLAYERS+1];
+bool g_bRecordingPaused[MAXPLAYERS + 1];
+bool g_bSaveFullSnapshot[MAXPLAYERS + 1];
 // How many calls to OnPlayerRunCmd were recorded?
-new g_iRecordedTicks[MAXPLAYERS+1];
+int g_iRecordedTicks[MAXPLAYERS + 1];
 // What's the last active weapon
-new g_iRecordPreviousWeapon[MAXPLAYERS+1];
+int g_iRecordPreviousWeapon[MAXPLAYERS + 1];
 // Count ticks till we save the position again
-new g_iOriginSnapshotInterval[MAXPLAYERS+1];
+int g_iOriginSnapshotInterval[MAXPLAYERS + 1];
 // The name of this recording
-new String:g_sRecordName[MAXPLAYERS+1][MAX_RECORD_NAME_LENGTH];
-new String:g_sRecordPath[MAXPLAYERS+1][PLATFORM_MAX_PATH];
-new String:g_sRecordCategory[MAXPLAYERS+1][PLATFORM_MAX_PATH];
-new String:g_sRecordSubDir[MAXPLAYERS+1][PLATFORM_MAX_PATH];
+char g_sRecordName[MAXPLAYERS + 1][MAX_RECORD_NAME_LENGTH];
+char g_sRecordPath[MAXPLAYERS + 1][PLATFORM_MAX_PATH];
+char g_sRecordCategory[MAXPLAYERS + 1][PLATFORM_MAX_PATH];
+char g_sRecordSubDir[MAXPLAYERS + 1][PLATFORM_MAX_PATH];
 
-new Handle:g_hLoadedRecords;
-new Handle:g_hLoadedRecordsAdditionalTeleport;
-new Handle:g_hLoadedRecordsCategory;
-new Handle:g_hSortedRecordList;
-new Handle:g_hSortedCategoryList;
+StringMap g_hLoadedRecords;
+StringMap g_hLoadedRecordsAdditionalTeleport;
+StringMap g_hLoadedRecordsCategory;
+ArrayList g_hSortedRecordList;
+ArrayList g_hSortedCategoryList;
 
-new Handle:g_hBotMimicsRecord[MAXPLAYERS+1] = {INVALID_HANDLE,...};
-new g_iBotMimicTick[MAXPLAYERS+1] = {0,...};
+Handle g_hBotMimicsRecord[MAXPLAYERS + 1];
+int g_iBotMimicTick[MAXPLAYERS + 1];
 bool g_bBotMimicStart[MAXPLAYERS + 1];
-new g_iBotMimicRecordTickCount[MAXPLAYERS+1] = {0,...};
-new g_iBotActiveWeapon[MAXPLAYERS+1] = {-1,...};
-new bool:g_bValidTeleportCall[MAXPLAYERS+1];
-new g_iBotMimicNextBookmarkTick[MAXPLAYERS+1][BookmarkWhileMimicing];
+int g_iBotMimicRecordTickCount[MAXPLAYERS + 1];
+int g_iBotActiveWeapon[MAXPLAYERS + 1] = {-1,...};
+bool g_bValidTeleportCall[MAXPLAYERS + 1];
+new g_iBotMimicNextBookmarkTick[MAXPLAYERS + 1][BookmarkWhileMimicing];
 
-new Handle:g_hfwdOnStartRecording;
-new Handle:g_hfwdOnRecordingPauseStateChanged;
-new Handle:g_hfwdOnRecordingBookmarkSaved;
-new Handle:g_hfwdOnStopRecording;
-new Handle:g_hfwdOnRecordSaved;
-new Handle:g_hfwdOnRecordDeleted;
-new Handle:g_hfwdOnPlayerStartsMimicing;
-new Handle:g_hfwdOnPlayerStopsMimicing;
-new Handle:g_hfwdOnPlayerMimicLoops;
-new Handle:g_hfwdOnPlayerMimicBookmark;
+Handle g_hfwdOnStartRecording;
+Handle g_hfwdOnRecordingPauseStateChanged;
+Handle g_hfwdOnRecordingBookmarkSaved;
+Handle g_hfwdOnStopRecording;
+Handle g_hfwdOnRecordSaved;
+Handle g_hfwdOnRecordDeleted;
+Handle g_hfwdOnPlayerStartsMimicing;
+Handle g_hfwdOnPlayerStopsMimicing;
+Handle g_hfwdOnPlayerMimicLoops;
+Handle g_hfwdOnPlayerMimicBookmark;
 
 // DHooks
-new Handle:g_hTeleport;
+Handle g_hTeleport;
 
-new Handle:g_hCVOriginSnapshotInterval;
-new Handle:g_hCVRespawnOnDeath;
+Handle g_hCVOriginSnapshotInterval;
+Handle g_hCVRespawnOnDeath;
 
 public Plugin:myinfo = 
 {
@@ -147,9 +149,10 @@ public Plugin:myinfo =
 	url = "http://www.wcfan.de/"
 }
 
-public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], err_max)
+public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
 {
 	RegPluginLibrary("botmimic");
+	
 	CreateNative("BotMimic_StartRecording", StartRecording);
 	CreateNative("BotMimic_PauseRecording", PauseRecording);
 	CreateNative("BotMimic_ResumeRecording", ResumeRecording);
@@ -182,16 +185,13 @@ public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], err_max)
 	g_hfwdOnPlayerStopsMimicing = CreateGlobalForward("BotMimic_OnPlayerStopsMimicing", ET_Ignore, Param_Cell, Param_String, Param_String, Param_String);
 	g_hfwdOnPlayerMimicLoops = CreateGlobalForward("BotMimic_OnPlayerMimicLoops", ET_Ignore, Param_Cell);
 	g_hfwdOnPlayerMimicBookmark = CreateGlobalForward("BotMimic_OnPlayerMimicBookmark", ET_Ignore, Param_Cell, Param_String);
+	
+	return APLRes_Success;
 }
 
 public OnPluginStart()
 {
-	new Handle:hVersion = CreateConVar("sm_botmimic_version", PLUGIN_VERSION, "Bot Mimic version", FCVAR_NOTIFY|FCVAR_DONTRECORD);
-	if(hVersion != INVALID_HANDLE)
-	{
-		SetConVarString(hVersion, PLUGIN_VERSION);
-		HookConVarChange(hVersion, ConVar_VersionChanged);
-	}
+	CreateConVar("sm_botmimic_version", PLUGIN_VERSION, "Bot Mimic version", FCVAR_NOTIFY|FCVAR_DONTRECORD);
 	
 	// Save the position of clients every 10000 ticks
 	// This is to avoid bots getting stuck in walls due to slightly lower jumps, if they don't touch the ground.
@@ -201,115 +201,114 @@ public OnPluginStart()
 	AutoExecConfig();
 	
 	// Maps path to .rec -> record enum
-	g_hLoadedRecords = CreateTrie();
-	g_hLoadedRecordsAdditionalTeleport = CreateTrie();
+	g_hLoadedRecords = new StringMap();
+	g_hLoadedRecordsAdditionalTeleport = new StringMap();
 	
 	// Maps path to .rec -> record category
-	g_hLoadedRecordsCategory = CreateTrie();
+	g_hLoadedRecordsCategory = new StringMap();
 	
 	// Save all paths to .rec files in the trie sorted by time
-	g_hSortedRecordList = CreateArray(ByteCountToCells(PLATFORM_MAX_PATH));
-	g_hSortedCategoryList = CreateArray(ByteCountToCells(64));
+	g_hSortedRecordList = new ArrayList(ByteCountToCells(PLATFORM_MAX_PATH));
+	g_hSortedCategoryList = new ArrayList(ByteCountToCells(64));
 	
 	HookEvent("player_spawn", Event_OnPlayerSpawn);
 	HookEvent("player_death", Event_OnPlayerDeath);
 	
-	if(LibraryExists("dhooks"))
-	{
+	if (LibraryExists("dhooks"))
 		OnLibraryAdded("dhooks");
-	}
-}
-
-public ConVar_VersionChanged(Handle:convar, const String:oldValue[], const String:newValue[])
-{
-	SetConVarString(convar, PLUGIN_VERSION);
 }
 
 /**
  * Public forwards
  */
-public OnLibraryAdded(const String:name[])
+public void OnLibraryAdded(const char[] name)
 {
-	if(StrEqual(name, "dhooks") && g_hTeleport == INVALID_HANDLE)
+	if (StrEqual(name, "dhooks") && g_hTeleport == null)
 	{
 		// Optionally setup a hook on CBaseEntity::Teleport to keep track of sudden place changes
-		new Handle:hGameData = LoadGameConfigFile("sdktools.games");
-		if(hGameData == INVALID_HANDLE)
+		Handle hGameData = LoadGameConfigFile("sdktools.games");
+		
+		if (hGameData == null)
 			return;
-		new iOffset = GameConfGetOffset(hGameData, "Teleport");
-		CloseHandle(hGameData);
-		if(iOffset == -1)
+		
+		int iOffset = GameConfGetOffset(hGameData, "Teleport");
+		delete hGameData;
+		
+		if (iOffset == -1)
 			return;
 		
 		g_hTeleport = DHookCreate(iOffset, HookType_Entity, ReturnType_Void, ThisPointer_CBaseEntity, DHooks_OnTeleport);
-		if(g_hTeleport == INVALID_HANDLE)
+		
+		if (g_hTeleport == null)
 			return;
+		
 		DHookAddParam(g_hTeleport, HookParamType_VectorPtr);
 		DHookAddParam(g_hTeleport, HookParamType_ObjectPtr);
 		DHookAddParam(g_hTeleport, HookParamType_VectorPtr);
-		if(GetEngineVersion() == Engine_CSGO)
+		
+		if (GetEngineVersion() == Engine_CSGO)
 			DHookAddParam(g_hTeleport, HookParamType_Bool);
 		
-		for(new i=1;i<=MaxClients;i++)
-		{
-			if(IsClientInGame(i))
+		for (int i = 1; i <= MaxClients; i++)
+			if (IsClientInGame(i))
 				OnClientPutInServer(i);
-		}
 	}
 }
 
-public OnLibraryRemoved(const String:name[])
+public void OnLibraryRemoved(const char[] name)
 {
-	if(StrEqual(name, "dhooks"))
-	{
-		g_hTeleport = INVALID_HANDLE;
-	}
+	if (StrEqual(name, "dhooks"))
+		g_hTeleport = null;
 }
 
 public OnMapStart()
 {
 	// Clear old records for old map
-	new iSize = GetArraySize(g_hSortedRecordList);
-	decl String:sPath[PLATFORM_MAX_PATH];
+	int iSize = g_hSortedRecordList.Length;
+	char sPath[PLATFORM_MAX_PATH];
 	new iFileHeader[FileHeader];
-	new Handle:hAdditionalTeleport;
-	for(new i=0;i<iSize;i++)
+	Handle hAdditionalTeleport;
+	
+	for (int i = 0; i < iSize; i++)
 	{
-		GetArrayString(g_hSortedRecordList, i, sPath, sizeof(sPath));
-		GetTrieArray(g_hLoadedRecords, sPath, iFileHeader[0], _:FileHeader);
-		if(iFileHeader[FH_frames] != INVALID_HANDLE)
-			CloseHandle(iFileHeader[FH_frames]);
-		if(iFileHeader[FH_bookmarks] != INVALID_HANDLE)
-			CloseHandle(iFileHeader[FH_bookmarks]);
-		if(GetTrieValue(g_hLoadedRecordsAdditionalTeleport, sPath, hAdditionalTeleport))
-			CloseHandle(hAdditionalTeleport);
+		g_hSortedRecordList.GetString(i, sPath, sizeof(sPath));
+		g_hLoadedRecords.GetArray(sPath, iFileHeader[0], _:FileHeader);
+		
+		delete iFileHeader[FH_frames];
+		delete iFileHeader[FH_bookmarks];
+		
+		if (g_hLoadedRecordsAdditionalTeleport.GetValue(sPath, hAdditionalTeleport))
+			delete hAdditionalTeleport;
 	}
-	ClearTrie(g_hLoadedRecords);
-	ClearTrie(g_hLoadedRecordsAdditionalTeleport);
-	ClearTrie(g_hLoadedRecordsCategory);
-	ClearArray(g_hSortedRecordList);
-	ClearArray(g_hSortedCategoryList);
+	
+	g_hLoadedRecords.Clear();
+	g_hLoadedRecordsAdditionalTeleport.Clear();
+	g_hLoadedRecordsCategory.Clear();
+	g_hSortedRecordList.Clear();
+	g_hSortedCategoryList.Clear();
 	
 	// Create our record directory
 	BuildPath(Path_SM, sPath, sizeof(sPath), DEFAULT_RECORD_FOLDER);
-	if(!DirExists(sPath))
+	
+	if (!DirExists(sPath))
 		CreateDirectory(sPath, 511);
 	
 	// Check for categories
-	new Handle:hDir = OpenDirectory(sPath);
-	if(hDir == INVALID_HANDLE)
+	Handle hDir = OpenDirectory(sPath);
+	
+	if (hDir == null)
 		return;
 	
-	new String:sFile[64], FileType:fileType;
-	while(ReadDirEntry(hDir, sFile, sizeof(sFile), fileType))
+	char sFile[64]; FileType fileType;
+	while (ReadDirEntry(hDir, sFile, sizeof(sFile), fileType))
 	{
-		switch(fileType)
+		switch (fileType)
 		{
 			// Check all directories for records on this map
 			case FileType_Directory:
 			{
 				// INFINITE RECURSION ANYONE?
-				if(StrEqual(sFile, ".") || StrEqual(sFile, ".."))
+				if (StrEqual(sFile, ".") || StrEqual(sFile, ".."))
 					continue;
 				
 				BuildPath(Path_SM, sPath, sizeof(sPath), "%s%s", DEFAULT_RECORD_FOLDER, sFile);
@@ -318,28 +317,29 @@ public OnMapStart()
 		}
 		
 	}
-	CloseHandle(hDir);
+	
+	delete hDir;
 }
 
 public OnClientPutInServer(client)
 {
-	if(g_hTeleport != INVALID_HANDLE)
+	if (g_hTeleport != null)
 		DHookEntity(g_hTeleport, false, client);
 }
 
 public OnClientDisconnect(client)
 {
-	if(g_hRecording[client] != INVALID_HANDLE)
+	if (g_hRecording[client] != null)
 		BotMimic_StopRecording(client);
 	
-	if(g_hBotMimicsRecord[client] != INVALID_HANDLE)
+	if (g_hBotMimicsRecord[client] != null)
 		BotMimic_StopPlayerMimic(client);
 }
 
 public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:angles[3], &weapon, &subtype, &cmdnum, &tickcount, &seed, mouse[2])
 {
 	// client is recording his movements
-	if(g_hRecording[client] != INVALID_HANDLE && !g_bRecordingPaused[client])
+	if (g_hRecording[client] != null && !g_bRecordingPaused[client])
 	{
 		new iFrame[FrameInfo];
 		iFrame[playerButtons] = buttons;
@@ -355,7 +355,7 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
 		iFrame[playerSeed] = seed;
 		
 		// Save the origin, angles and velocity in this frame.
-		if(g_bSaveFullSnapshot[client])
+		if (g_bSaveFullSnapshot[client])
 		{
 			new iAT[AdditionalTeleport], Float:fBuffer[3];
 			GetClientAbsOrigin(client, fBuffer);
@@ -373,7 +373,7 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
 		{
 			// Save the current position 
 			new iInterval = GetConVarInt(g_hCVOriginSnapshotInterval);
-			if(iInterval > 0 && g_iOriginSnapshotInterval[client] > iInterval)
+			if (iInterval > 0 && g_iOriginSnapshotInterval[client] > iInterval)
 			{
 				new Float:origin[3], iAT[AdditionalTeleport];
 				GetClientAbsOrigin(client, origin);
@@ -387,7 +387,7 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
 		g_iOriginSnapshotInterval[client]++;
 		
 		// Check for additional Teleports
-		if(GetArraySize(g_hRecordingAdditionalTeleport[client]) > g_iCurrentAdditionalTeleportIndex[client])
+		if (GetArraySize(g_hRecordingAdditionalTeleport[client]) > g_iCurrentAdditionalTeleportIndex[client])
 		{
 			new iAT[AdditionalTeleport];
 			GetArrayArray(g_hRecordingAdditionalTeleport[client], g_iCurrentAdditionalTeleportIndex[client], iAT[0], _:AdditionalTeleport);
@@ -399,38 +399,32 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
 		new iNewWeapon = -1;
 		
 		// Did he change his weapon?
-		if(weapon)
-		{
+		if (weapon)
 			iNewWeapon = weapon;
-		}
 		// Picked up a new one?
 		else
 		{
 			new iWeapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
 			
 			// He's holding a weapon and
-			if(iWeapon != -1 && 
 			// we just started recording. Always save the first weapon!
-			   (g_iRecordedTicks[client] == 0 ||
 			// This is a new weapon, he didn't held before.
-			   g_iRecordPreviousWeapon[client] != iWeapon))
-			{
+			if (iWeapon != -1 && (g_iRecordedTicks[client] == 0 || g_iRecordPreviousWeapon[client] != iWeapon))
 				iNewWeapon = iWeapon;
-			}
 		}
 		
-		if(iNewWeapon != -1)
+		if (iNewWeapon != -1)
 		{
 			// Save it
-			if(IsValidEntity(iNewWeapon) && IsValidEdict(iNewWeapon))
+			if (IsValidEntity(iNewWeapon) && IsValidEdict(iNewWeapon))
 			{
 				g_iRecordPreviousWeapon[client] = iNewWeapon;
 				
-				new String:sClassName[64];
+				char sClassName[64];
 				GetEdictClassname(iNewWeapon, sClassName, sizeof(sClassName));
 				ReplaceString(sClassName, sizeof(sClassName), "weapon_", "", false);
 				
-				new String:sWeaponAlias[64];
+				char sWeaponAlias[64];
 				CS_GetTranslatedWeaponAlias(sClassName, sWeaponAlias, sizeof(sWeaponAlias));
 				new CSWeaponID:weaponId = CS_AliasToWeaponID(sWeaponAlias);
 				
@@ -439,18 +433,17 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
 		}
 		
 		PushArrayArray(g_hRecording[client], iFrame[0], _:FrameInfo);
-		
 		g_iRecordedTicks[client]++;
 	}
 	
 	// Bot is mimicing something
-	else if(g_hBotMimicsRecord[client] != INVALID_HANDLE)
+	else if (g_hBotMimicsRecord[client] != null)
 	{
 		// Is this a valid living bot?
-		if(!IsPlayerAlive(client) || GetClientTeam(client) < CS_TEAM_T)
+		if (!IsPlayerAlive(client) || GetClientTeam(client) < CS_TEAM_T)
 			return Plugin_Continue;
 		
-		if(g_iBotMimicTick[client] >= g_iBotMimicRecordTickCount[client])
+		if (g_iBotMimicTick[client] >= g_iBotMimicRecordTickCount[client])
 		{
 			g_iBotMimicTick[client] = 0;
 			g_iCurrentAdditionalTeleportIndex[client] = 0;
@@ -471,11 +464,11 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
 		CopyArrayToArray(iFrame[actualVelocity], fActualVelocity, 3);
 		
 		// We're supposed to teleport stuff?
-		if(iFrame[additionalFields] & (ADDITIONAL_FIELD_TELEPORTED_ORIGIN|ADDITIONAL_FIELD_TELEPORTED_ANGLES|ADDITIONAL_FIELD_TELEPORTED_VELOCITY))
+		if (iFrame[additionalFields] & (ADDITIONAL_FIELD_TELEPORTED_ORIGIN|ADDITIONAL_FIELD_TELEPORTED_ANGLES|ADDITIONAL_FIELD_TELEPORTED_VELOCITY))
 		{
-			new iAT[AdditionalTeleport], Handle:hAdditionalTeleport, String:sPath[PLATFORM_MAX_PATH];
+			new iAT[AdditionalTeleport], Handle:hAdditionalTeleport; char sPath[PLATFORM_MAX_PATH];
 			GetFileFromFrameHandle(g_hBotMimicsRecord[client], sPath, sizeof(sPath));
-			GetTrieValue(g_hLoadedRecordsAdditionalTeleport, sPath, hAdditionalTeleport);
+			g_hLoadedRecordsAdditionalTeleport.GetValue(sPath, hAdditionalTeleport);
 			GetArrayArray(hAdditionalTeleport, g_iCurrentAdditionalTeleportIndex[client], iAT[0], _:AdditionalTeleport);
 			
 			new Float:fOrigin[3], Float:fAngles[3], Float:fVelocity[3];
@@ -488,18 +481,18 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
 			
 			// THATS STUPID!
 			// Only pass the arguments, if they were set..
-			if(iAT[atFlags] & ADDITIONAL_FIELD_TELEPORTED_ORIGIN)
+			if (iAT[atFlags] & ADDITIONAL_FIELD_TELEPORTED_ORIGIN)
 			{
-				if(iAT[atFlags] & ADDITIONAL_FIELD_TELEPORTED_ANGLES)
+				if (iAT[atFlags] & ADDITIONAL_FIELD_TELEPORTED_ANGLES)
 				{
-					if(iAT[atFlags] & ADDITIONAL_FIELD_TELEPORTED_VELOCITY)
+					if (iAT[atFlags] & ADDITIONAL_FIELD_TELEPORTED_VELOCITY)
 						TeleportEntity(client, fOrigin, fAngles, fVelocity);
 					else
 						TeleportEntity(client, fOrigin, fAngles, NULL_VECTOR);
 				}
 				else
 				{
-					if(iAT[atFlags] & ADDITIONAL_FIELD_TELEPORTED_VELOCITY)
+					if (iAT[atFlags] & ADDITIONAL_FIELD_TELEPORTED_VELOCITY)
 						TeleportEntity(client, fOrigin, NULL_VECTOR, fVelocity);
 					else
 						TeleportEntity(client, fOrigin, NULL_VECTOR, NULL_VECTOR);
@@ -507,16 +500,16 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
 			}
 			else
 			{
-				if(iAT[atFlags] & ADDITIONAL_FIELD_TELEPORTED_ANGLES)
+				if (iAT[atFlags] & ADDITIONAL_FIELD_TELEPORTED_ANGLES)
 				{
-					if(iAT[atFlags] & ADDITIONAL_FIELD_TELEPORTED_VELOCITY)
+					if (iAT[atFlags] & ADDITIONAL_FIELD_TELEPORTED_VELOCITY)
 						TeleportEntity(client, NULL_VECTOR, fAngles, fVelocity);
 					else
 						TeleportEntity(client, NULL_VECTOR, fAngles, NULL_VECTOR);
 				}
 				else
 				{
-					if(iAT[atFlags] & ADDITIONAL_FIELD_TELEPORTED_VELOCITY)
+					if (iAT[atFlags] & ADDITIONAL_FIELD_TELEPORTED_VELOCITY)
 						TeleportEntity(client, NULL_VECTOR, NULL_VECTOR, fVelocity);
 				}
 			}
@@ -525,7 +518,7 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
 		}
 		
 		// This is the first tick. Teleport him to the initial position
-		if(g_iBotMimicTick[client] == 0 || g_bBotMimicStart[client])
+		if (g_iBotMimicTick[client] == 0 || g_bBotMimicStart[client])
 		{
 			g_bBotMimicStart[client] = false;
 			g_bValidTeleportCall[client] = true;
@@ -542,14 +535,14 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
 			TeleportEntity(client, NULL_VECTOR, angles, fActualVelocity);
 		}
 		
-		if(iFrame[newWeapon] != CSWeapon_NONE)
+		if (iFrame[newWeapon] != CSWeapon_NONE)
 		{
-			decl String:sAlias[64];
+			char sAlias[64];
 			CS_WeaponIDToAlias(iFrame[newWeapon], sAlias, sizeof(sAlias));
 			
 			Format(sAlias, sizeof(sAlias), "weapon_%s", sAlias);
 			
-			if(g_iBotMimicTick[client] > 0 && HasWeapon(client, sAlias))
+			if (g_iBotMimicTick[client] > 0 && HasWeapon(client, sAlias))
 			{
 				weapon = GetWeapon(client, sAlias);
 				g_iBotActiveWeapon[client] = weapon;
@@ -559,18 +552,13 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
 			else
 			{
 				weapon = GivePlayerItem(client, sAlias);
-				if(weapon != INVALID_ENT_REFERENCE)
+				if (weapon != INVALID_ENT_REFERENCE)
 				{
 					g_iBotActiveWeapon[client] = weapon;
 					
 					// Grenades shouldn't be equipped.
-					if(StrContains(sAlias, "grenade") == -1 
-					&& StrContains(sAlias, "flashbang") == -1 
-					&& StrContains(sAlias, "decoy") == -1 
-					&& StrContains(sAlias, "molotov") == -1)
-					{
+					if (StrContains(sAlias, "grenade") == -1 && StrContains(sAlias, "flashbang") == -1 && StrContains(sAlias, "decoy") == -1 && StrContains(sAlias, "molotov") == -1)
 						EquipPlayerWeapon(client, weapon);
-					}
 					
 					SetEntPropEnt(client, Prop_Send, "m_hActiveWeapon", weapon);
 					EquipWeapon(client, weapon);
@@ -579,13 +567,13 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
 		}
 		
 		// See if there's a bookmark on this tick
-		if(g_iBotMimicTick[client] == g_iBotMimicNextBookmarkTick[client][BWM_frame])
+		if (g_iBotMimicTick[client] == g_iBotMimicNextBookmarkTick[client][BWM_frame])
 		{
 			// Get the file header of the current playing record.
-			new String:sPath[PLATFORM_MAX_PATH];
+			char sPath[PLATFORM_MAX_PATH];
 			GetFileFromFrameHandle(g_hBotMimicsRecord[client], sPath, sizeof(sPath));
 			new iFileHeader[FileHeader];
-			GetTrieArray(g_hLoadedRecords, sPath, iFileHeader[0], _:FileHeader);
+			g_hLoadedRecords.GetArray(sPath, iFileHeader[0], _:FileHeader);
 	
 			new iBookmark[Bookmarks];
 			GetArrayArray(iFileHeader[FH_bookmarks], g_iBotMimicNextBookmarkTick[client][BWM_index], iBookmark[0], _:Bookmarks);
@@ -611,38 +599,49 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
 /**
  * Event Callbacks
  */
-public Event_OnPlayerSpawn(Handle:event, const String:name[], bool:dontBroadcast)
+public void Event_OnPlayerSpawn(Event event, const char[] name, bool  dontBroadcast)
 {
-	new client = GetClientOfUserId(GetEventInt(event, "userid"));
-	if(!client)
+	int client = GetClientOfUserId(event.GetInt("userid"));
+	
+	if (client == 0)
 		return;
 	
 	// Restart moving on spawn!
-	if(g_hBotMimicsRecord[client] != INVALID_HANDLE)
+	if (g_hBotMimicsRecord[client] != null)
 	{
 		g_iBotMimicTick[client] = 0;
 		g_iCurrentAdditionalTeleportIndex[client] = 0;
 	}
 }
 
-public Event_OnPlayerDeath(Handle:event, const String:name[], bool:dontBroadcast)
+public void Event_OnPlayerDeath(Event event, const char[] name, bool dontBroadcast)
 {
-	new client = GetClientOfUserId(GetEventInt(event, "userid"));
-	if(!client)
+	int userid = event.GetInt("userid");
+	
+	if (GetClientOfUserId(userid) == 0)
+		return;
+	
+	CreateTimer(0.2, Timer_DelayDeath, userid, TIMER_FLAG_NO_MAPCHANGE);
+}
+
+public Action Timer_DelayDeath(Handle timer, any data)
+{
+	int client = GetClientOfUserId(data);
+	
+	if (client == 0)
 		return;
 	
 	// This one has been recording currently
-	if(g_hRecording[client] != INVALID_HANDLE)
-	{
+	if (g_hRecording[client] != null)
 		BotMimic_StopRecording(client, true);
-	}
 	// This bot has been playing one
-	else if(g_hBotMimicsRecord[client] != INVALID_HANDLE)
+	else if (g_hBotMimicsRecord[client] != null)
 	{
 		// Respawn the bot after death!
 		g_iBotMimicTick[client] = 0;
 		g_iCurrentAdditionalTeleportIndex[client] = 0;
-		if(GetConVarBool(g_hCVRespawnOnDeath) && GetClientTeam(client) >= CS_TEAM_T)
+		
+		if (GetConVarBool(g_hCVRespawnOnDeath) && GetClientTeam(client) >= CS_TEAM_T)
 			CreateTimer(1.0, Timer_DelayedRespawn, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
 	}
 }
@@ -652,11 +651,12 @@ public Event_OnPlayerDeath(Handle:event, const String:name[], bool:dontBroadcast
  */
 public Action:Timer_DelayedRespawn(Handle:timer, any:userid)
 {
-	new client = GetClientOfUserId(userid);
-	if(!client)
+	int client = GetClientOfUserId(userid);
+	
+	if (client == 0)
 		return Plugin_Stop;
 	
-	if(g_hBotMimicsRecord[client] != INVALID_HANDLE && IsClientInGame(client) && !IsPlayerAlive(client) && IsFakeClient(client) && GetClientTeam(client) >= CS_TEAM_T)
+	if (g_hBotMimicsRecord[client] != null && IsClientInGame(client) && !IsPlayerAlive(client) && IsFakeClient(client) && GetClientTeam(client) >= CS_TEAM_T)
 		CS_RespawnPlayer(client);
 	
 	return Plugin_Stop;
@@ -669,13 +669,12 @@ public Action:Timer_DelayedRespawn(Handle:timer, any:userid)
 // Don't allow mimicing players any other weapon than the one recorded!!
 public Action:Hook_WeaponCanSwitchTo(client, weapon)
 {
-	if(g_hBotMimicsRecord[client] == INVALID_HANDLE)
+	if (g_hBotMimicsRecord[client] == null)
 		return Plugin_Continue;
 	
-	if(g_iBotActiveWeapon[client] != weapon)
-	{
+	if (g_iBotActiveWeapon[client] != weapon)
 		return Plugin_Stop;
-	}
+	
 	return Plugin_Continue;
 }
 
@@ -685,37 +684,38 @@ public Action:Hook_WeaponCanSwitchTo(client, weapon)
 public MRESReturn:DHooks_OnTeleport(client, Handle:hParams)
 {
 	// This one is currently mimicing something.
-	if(g_hBotMimicsRecord[client] != INVALID_HANDLE)
+	if (g_hBotMimicsRecord[client] != null)
 	{
 		// We didn't allow that teleporting. STOP THAT.
-		if(!g_bValidTeleportCall[client])
+		if (!g_bValidTeleportCall[client])
 			return MRES_Supercede;
+		
 		g_bValidTeleportCall[client] = false;
 		return MRES_Ignored;
 	}
 	
 	// Don't care if he's not recording.
-	if(g_hRecording[client] == INVALID_HANDLE)
+	if (g_hRecording[client] == null)
 		return MRES_Ignored;
 	
 	new Float:origin[3], Float:angles[3], Float:velocity[3];
-	new bool:bOriginNull = DHookIsNullParam(hParams, 1);
-	new bool:bAnglesNull = DHookIsNullParam(hParams, 2);
-	new bool:bVelocityNull = DHookIsNullParam(hParams, 3);
+	bool bOriginNull = DHookIsNullParam(hParams, 1);
+	bool bAnglesNull = DHookIsNullParam(hParams, 2);
+	bool bVelocityNull = DHookIsNullParam(hParams, 3);
 	
-	if(!bOriginNull)
+	if (!bOriginNull)
 		DHookGetParamVector(hParams, 1, origin);
 	
-	if(!bAnglesNull)
+	if (!bAnglesNull)
 	{
-		for(new i=0;i<3;i++)
+		for (int i=0;i<3;i++)
 			angles[i] = DHookGetParamObjectPtrVar(hParams, 2, i*4, ObjectValueType_Float);
 	}
 	
-	if(!bVelocityNull)
+	if (!bVelocityNull)
 		DHookGetParamVector(hParams, 3, velocity);
 	
-	if(bOriginNull && bAnglesNull && bVelocityNull)
+	if (bOriginNull && bAnglesNull && bVelocityNull)
 		return MRES_Ignored;
 	
 	new iAT[AdditionalTeleport];
@@ -724,11 +724,11 @@ public MRESReturn:DHooks_OnTeleport(client, Handle:hParams)
 	CopyArrayToArray(velocity, iAT[atVelocity], 3);
 	
 	// Remember, 
-	if(!bOriginNull)
+	if (!bOriginNull)
 		iAT[atFlags] |= ADDITIONAL_FIELD_TELEPORTED_ORIGIN;
-	if(!bAnglesNull)
+	if (!bAnglesNull)
 		iAT[atFlags] |= ADDITIONAL_FIELD_TELEPORTED_ANGLES;
-	if(!bVelocityNull)
+	if (!bVelocityNull)
 		iAT[atFlags] |= ADDITIONAL_FIELD_TELEPORTED_VELOCITY;
 	
 	PushArrayArray(g_hRecordingAdditionalTeleport[client], iAT[0], _:AdditionalTeleport);
@@ -739,22 +739,23 @@ public MRESReturn:DHooks_OnTeleport(client, Handle:hParams)
 /**
  * Natives
  */
-public StartRecording(Handle:plugin, numParams)
+public int StartRecording(Handle plugin, int numParams)
 {
-	new client = GetNativeCell(1);
-	if(client < 1 || client > MaxClients || !IsClientInGame(client))
+	int client = GetNativeCell(1);
+	
+	if (client < 1 || client > MaxClients || !IsClientInGame(client))
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "Bad player index %d", client);
 		return;
 	}
 	
-	if(g_hRecording[client] != INVALID_HANDLE)
+	if (g_hRecording[client] != null)
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "Player is already recording.");
 		return;
 	}
 	
-	if(g_hBotMimicsRecord[client] != INVALID_HANDLE)
+	if (g_hBotMimicsRecord[client] != null)
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "Player is currently mimicing another record.");
 		return;
@@ -772,7 +773,7 @@ public StartRecording(Handle:plugin, numParams)
 	GetNativeString(3, g_sRecordCategory[client], PLATFORM_MAX_PATH);
 	GetNativeString(4, g_sRecordSubDir[client], PLATFORM_MAX_PATH);
 	
-	if(g_sRecordCategory[client][0] == '\0')
+	if (g_sRecordCategory[client][0] == '\0')
 		strcopy(g_sRecordCategory[client], sizeof(g_sRecordCategory[]), DEFAULT_CATEGORY);
 	
 	// Path:
@@ -783,11 +784,10 @@ public StartRecording(Handle:plugin, numParams)
 	BuildPath(Path_SM, g_sRecordPath[client], PLATFORM_MAX_PATH, "%s%s", DEFAULT_RECORD_FOLDER, g_sRecordCategory[client]);
 	
 	// Remove trailing slashes
-	if(g_sRecordPath[client][strlen(g_sRecordPath[client])-1] == '\\' ||
-		g_sRecordPath[client][strlen(g_sRecordPath[client])-1] == '/')
-		g_sRecordPath[client][strlen(g_sRecordPath[client])-1] = '\0';
+	if (g_sRecordPath[client][strlen(g_sRecordPath[client]) - 1] == '\\' || g_sRecordPath[client][strlen(g_sRecordPath[client]) - 1] == '/')
+		g_sRecordPath[client][strlen(g_sRecordPath[client]) - 1] = '\0';
 	
-	new Action:result;
+	Action result;
 	Call_StartForward(g_hfwdOnStartRecording);
 	Call_PushCell(client);
 	Call_PushString(g_sRecordName[client]);
@@ -796,26 +796,27 @@ public StartRecording(Handle:plugin, numParams)
 	Call_PushString(g_sRecordPath[client]);
 	Call_Finish(result);
 	
-	if(result >= Plugin_Handled)
+	if (result >= Plugin_Handled)
 		BotMimic_StopRecording(client, false);
 }
 
 public PauseRecording(Handle:plugin, numParams)
 {
-	new client = GetNativeCell(1);
-	if(client < 1 || client > MaxClients || !IsClientInGame(client))
+	int client = GetNativeCell(1);
+	
+	if (client < 1 || client > MaxClients || !IsClientInGame(client))
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "Bad player index %d", client);
 		return;
 	}
 	
-	if(g_hRecording[client] == INVALID_HANDLE)
+	if (g_hRecording[client] == null)
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "Player is not recording.");
 		return;
 	}
 	
-	if(g_bRecordingPaused[client])
+	if (g_bRecordingPaused[client])
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "Recording is already paused.");
 		return;
@@ -831,20 +832,21 @@ public PauseRecording(Handle:plugin, numParams)
 
 public ResumeRecording(Handle:plugin, numParams)
 {
-	new client = GetNativeCell(1);
-	if(client < 1 || client > MaxClients || !IsClientInGame(client))
+	int client = GetNativeCell(1);
+	
+	if (client < 1 || client > MaxClients || !IsClientInGame(client))
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "Bad player index %d", client);
 		return;
 	}
 	
-	if(g_hRecording[client] == INVALID_HANDLE)
+	if (g_hRecording[client] == null)
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "Player is not recording.");
 		return;
 	}
 	
-	if(!g_bRecordingPaused[client])
+	if (!g_bRecordingPaused[client])
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "Recording is not paused.");
 		return;
@@ -863,14 +865,15 @@ public ResumeRecording(Handle:plugin, numParams)
 
 public IsRecordingPaused(Handle:plugin, numParams)
 {
-	new client = GetNativeCell(1);
-	if(client < 1 || client > MaxClients || !IsClientInGame(client))
+	int client = GetNativeCell(1);
+	
+	if (client < 1 || client > MaxClients || !IsClientInGame(client))
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "Bad player index %d", client);
 		return false;
 	}
 	
-	if(g_hRecording[client] == INVALID_HANDLE)
+	if (g_hRecording[client] == null)
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "Player is not recording.");
 		return false;
@@ -881,21 +884,22 @@ public IsRecordingPaused(Handle:plugin, numParams)
 
 public StopRecording(Handle:plugin, numParams)
 {
-	new client = GetNativeCell(1);
-	if(client < 1 || client > MaxClients || !IsClientInGame(client))
+	int client = GetNativeCell(1);
+	
+	if (client < 1 || client > MaxClients || !IsClientInGame(client))
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "Bad player index %d", client);
 		return;
 	}
 	
 	// Not recording..
-	if(g_hRecording[client] == INVALID_HANDLE)
+	if (g_hRecording[client] == null)
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "Player is not recording.");
 		return;
 	}
 	
-	new bool:save = GetNativeCell(2);
+	bool save = GetNativeCell(2);
 	
 	new Action:result;
 	Call_StartForward(g_hfwdOnStopRecording);
@@ -908,40 +912,41 @@ public StopRecording(Handle:plugin, numParams)
 	Call_Finish(result);
 	
 	// Don't stop recording?
-	if(result >= Plugin_Handled)
+	if (result >= Plugin_Handled)
 		return;
 	
-	if(save)
+	if (save)
 	{
 		new iEndTime = GetTime();
 		
-		decl String:sMapName[64], String:sPath[PLATFORM_MAX_PATH];
+		char sMapName[64]; char sPath[PLATFORM_MAX_PATH];
 		GetCurrentMap(sMapName, sizeof(sMapName));
 		
 		// Check if the default record folder exists?
 		BuildPath(Path_SM, sPath, sizeof(sPath), DEFAULT_RECORD_FOLDER);
 		// Remove trailing slashes
-		if(sPath[strlen(sPath)-1] == '\\' || sPath[strlen(sPath)-1] == '/')
+		if (sPath[strlen(sPath)-1] == '\\' || sPath[strlen(sPath)-1] == '/')
 			sPath[strlen(sPath)-1] = '\0';
 		
-		if(!CheckCreateDirectory(sPath, 511))
+		if (!CheckCreateDirectory(sPath, 511))
 			return;
 		
 		// Check if the category folder exists?
 		BuildPath(Path_SM, sPath, sizeof(sPath), "%s%s", DEFAULT_RECORD_FOLDER, g_sRecordCategory[client]);
-		if(!CheckCreateDirectory(sPath, 511))
+		if (!CheckCreateDirectory(sPath, 511))
 			return;
 		
 		// Check, if there is a folder for this map already
 		Format(sPath, sizeof(sPath), "%s/%s", g_sRecordPath[client], sMapName);
-		if(!CheckCreateDirectory(sPath, 511))
+		if (!CheckCreateDirectory(sPath, 511))
 			return;
 		
 		// Check if the subdirectory exists
-		if(g_sRecordSubDir[client][0] != '\0')
+		if (g_sRecordSubDir[client][0] != '\0')
 		{
 			Format(sPath, sizeof(sPath), "%s/%s", sPath, g_sRecordSubDir[client]);
-			if(!CheckCreateDirectory(sPath, 511))
+			
+			if (!CheckCreateDirectory(sPath, 511))
 				return;
 		}
 		
@@ -960,22 +965,18 @@ public StopRecording(Handle:plugin, numParams)
 		iHeader[FH_bookmarkCount] = GetArraySize(g_hRecordingBookmarks[client]);
 		iHeader[FH_bookmarks] = g_hRecordingBookmarks[client];
 		
-		if(GetArraySize(g_hRecordingAdditionalTeleport[client]) > 0)
-		{
-			SetTrieValue(g_hLoadedRecordsAdditionalTeleport, sPath, g_hRecordingAdditionalTeleport[client]);
-		}
+		if (GetArraySize(g_hRecordingAdditionalTeleport[client]) > 0)
+			g_hLoadedRecordsAdditionalTeleport.SetValue(sPath, g_hRecordingAdditionalTeleport[client]);
 		else
-		{
-			CloseHandle(g_hRecordingAdditionalTeleport[client]);
-		}
+			delete g_hRecordingAdditionalTeleport[client];
 		
 		WriteRecordToDisk(sPath, iHeader);
 		
-		SetTrieArray(g_hLoadedRecords, sPath, iHeader[0], _:FileHeader);
-		SetTrieString(g_hLoadedRecordsCategory, sPath, g_sRecordCategory[client]);
-		PushArrayString(g_hSortedRecordList, sPath);
-		if(FindStringInArray(g_hSortedCategoryList, g_sRecordCategory[client]) == -1)
-			PushArrayString(g_hSortedCategoryList, g_sRecordCategory[client]);
+		g_hLoadedRecords.SetArray(sPath, iHeader[0], _:FileHeader);
+		g_hLoadedRecordsCategory.SetString(sPath, g_sRecordCategory[client]);
+		g_hSortedRecordList.PushString(sPath);
+		if (g_hSortedCategoryList.FindString(g_sRecordCategory[client]) == -1)
+			g_hSortedCategoryList.PushString(g_sRecordCategory[client]);
 		SortRecordList();
 		
 		Call_StartForward(g_hfwdOnRecordSaved);
@@ -988,14 +989,14 @@ public StopRecording(Handle:plugin, numParams)
 	}
 	else
 	{
-		CloseHandle(g_hRecording[client]);
-		CloseHandle(g_hRecordingAdditionalTeleport[client]);
-		CloseHandle(g_hRecordingBookmarks[client]);
+		delete g_hRecording[client];
+		delete g_hRecordingAdditionalTeleport[client];
+		delete g_hRecordingBookmarks[client];
 	}
 	
-	g_hRecording[client] = INVALID_HANDLE;
-	g_hRecordingAdditionalTeleport[client] = INVALID_HANDLE;
-	g_hRecordingBookmarks[client] = INVALID_HANDLE;
+	g_hRecording[client] = null;
+	g_hRecordingAdditionalTeleport[client] = null;
+	g_hRecordingBookmarks[client] = null;
 	g_iRecordedTicks[client] = 0;
 	g_iRecordPreviousWeapon[client] = 0;
 	g_sRecordName[client][0] = 0;
@@ -1010,30 +1011,31 @@ public StopRecording(Handle:plugin, numParams)
 
 public SaveBookmark(Handle:plugin, numParams)
 {
-	new client = GetNativeCell(1);
-	if(client < 1 || client > MaxClients || !IsClientInGame(client))
+	int client = GetNativeCell(1);
+	
+	if (client < 1 || client > MaxClients || !IsClientInGame(client))
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "Bad player index %d", client);
 		return;
 	}
 	
 	// Not recording..
-	if(g_hRecording[client] == INVALID_HANDLE)
+	if (g_hRecording[client] == null)
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "Player is not recording.");
 		return;
 	}
 	
-	new String:sBookmarkName[MAX_BOOKMARK_NAME_LENGTH];
+	char sBookmarkName[MAX_BOOKMARK_NAME_LENGTH];
 	GetNativeString(2, sBookmarkName, sizeof(sBookmarkName));
 	
 	// First check if there already is a bookmark with this name
 	new iBookmark[Bookmarks];
 	new iSize = GetArraySize(g_hRecordingBookmarks[client]);
-	for(new i=0;i<iSize;i++)
+	for (int i=0;i<iSize;i++)
 	{
 		GetArrayArray(g_hRecordingBookmarks[client], i, iBookmark[0], _:Bookmarks);
-		if(StrEqual(iBookmark[BKM_name], sBookmarkName, false))
+		if (StrEqual(iBookmark[BKM_name], sBookmarkName, false))
 		{
 			ThrowNativeError(SP_ERROR_NATIVE, "There already is a bookmark named \"%s\".", sBookmarkName);
 			return;
@@ -1054,7 +1056,7 @@ public SaveBookmark(Handle:plugin, numParams)
 	new iFrame[FrameInfo];
 	GetArrayArray(g_hRecording[client], g_iRecordedTicks[client]-1, iFrame[0], _:FrameInfo);
 	// There already is some Teleport call saved this frame :(
-	if((iFrame[additionalFields] & iAT[atFlags]) != 0)
+	if ((iFrame[additionalFields] & iAT[atFlags]) != 0)
 	{
 		// Purge it and replace it with this one as we might have more information.
 		SetArrayArray(g_hRecordingAdditionalTeleport[client], g_iCurrentAdditionalTeleportIndex[client]-1, iAT[0], _:AdditionalTeleport);
@@ -1068,13 +1070,13 @@ public SaveBookmark(Handle:plugin, numParams)
 	iFrame[additionalFields] |= iAT[atFlags];
 	
 	new iWeapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
-	if(iWeapon != INVALID_ENT_REFERENCE && iFrame[newWeapon] == CSWeapon_NONE && IsValidEntity(iWeapon))
+	if (iWeapon != INVALID_ENT_REFERENCE && iFrame[newWeapon] == CSWeapon_NONE && IsValidEntity(iWeapon))
 	{
-		new String:sClassName[64];
+		char sClassName[64];
 		GetEntityClassname(iWeapon, sClassName, sizeof(sClassName));
 		ReplaceString(sClassName, sizeof(sClassName), "weapon_", "", false);
 		
-		new String:sWeaponAlias[64];
+		char sWeaponAlias[64];
 		CS_GetTranslatedWeaponAlias(sClassName, sWeaponAlias, sizeof(sWeaponAlias));
 		new CSWeaponID:weaponId = CS_AliasToWeaponID(sWeaponAlias);
 		iFrame[newWeapon] = weaponId;
@@ -1099,29 +1101,29 @@ public DeleteRecord(Handle:plugin, numParams)
 {
 	new iLen;
 	GetNativeStringLength(1, iLen);
-	new String:sPath[iLen+1];
+	char[] sPath = new char[iLen+1];
 	GetNativeString(1, sPath, iLen+1);
 	
 	// Do we have this record loaded?
 	new iFileHeader[FileHeader];
-	if(!GetTrieArray(g_hLoadedRecords, sPath, iFileHeader[0], _:FileHeader))
+	if (!g_hLoadedRecords.GetArray(sPath, iFileHeader[0], _:FileHeader))
 	{
-		if(!FileExists(sPath))
+		if (!FileExists(sPath))
 			return -1;
 		
 		// Try to load it to make sure it's a record file we're deleting here!
 		new BMError:error = LoadRecordFromFile(sPath, DEFAULT_CATEGORY, iFileHeader, true, false);
-		if(error == BM_FileNotFound || error == BM_BadFile)
+		if (error == BM_FileNotFound || error == BM_BadFile)
 			return -1;
 	}
 	
 	new iCount;
-	if(iFileHeader[FH_frames] != INVALID_HANDLE)
+	if (iFileHeader[FH_frames] != null)
 	{
-		for(new i=1;i<=MaxClients;i++)
+		for (int i=1;i<=MaxClients;i++)
 		{
 			// Stop the bots from mimicing this one
-			if(g_hBotMimicsRecord[i] == iFileHeader[FH_frames])
+			if (g_hBotMimicsRecord[i] == iFileHeader[FH_frames])
 			{
 				BotMimic_StopPlayerMimic(i);
 				iCount++;
@@ -1129,30 +1131,28 @@ public DeleteRecord(Handle:plugin, numParams)
 		}
 		
 		// Discard the frames
-		CloseHandle(iFileHeader[FH_frames]);
+		delete iFileHeader[FH_frames];
 	}
 	
-	if(iFileHeader[FH_bookmarks] != INVALID_HANDLE)
-	{
-		CloseHandle(iFileHeader[FH_bookmarks]);
-	}
+	delete iFileHeader[FH_bookmarks];
 	
-	new String:sCategory[64];
-	GetTrieString(g_hLoadedRecordsCategory, sPath, sCategory, sizeof(sCategory));
+	char sCategory[64];
+	g_hLoadedRecordsCategory.GetString(sPath, sCategory, sizeof(sCategory));
 	
-	RemoveFromTrie(g_hLoadedRecords, sPath);
-	RemoveFromTrie(g_hLoadedRecordsCategory, sPath);
-	RemoveFromArray(g_hSortedRecordList, FindStringInArray(g_hSortedRecordList, sPath));
-	new Handle:hAT;
-	if(GetTrieValue(g_hLoadedRecordsAdditionalTeleport, sPath, hAT))
-		CloseHandle(hAT);
-	RemoveFromTrie(g_hLoadedRecordsAdditionalTeleport, sPath);
+	g_hLoadedRecords.Remove(sPath);
+	g_hLoadedRecordsCategory.Remove(sPath);
+	g_hSortedRecordList.Erase 	
+	(g_hSortedRecordList.FindString(sPath));
+	
+	Handle hAT;
+	if (g_hLoadedRecordsAdditionalTeleport.GetValue(sPath, hAT))
+		delete hAT;
+	
+	g_hLoadedRecordsAdditionalTeleport.Remove(sPath);
 	
 	// Delete the file
-	if(FileExists(sPath))
-	{
+	if (FileExists(sPath))
 		DeleteFile(sPath);
-	}
 	
 	Call_StartForward(g_hfwdOnRecordDeleted);
 	Call_PushString(iFileHeader[FH_recordName]);
@@ -1165,87 +1165,91 @@ public DeleteRecord(Handle:plugin, numParams)
 
 public IsPlayerRecording(Handle:plugin, numParams)
 {
-	new client = GetNativeCell(1);
-	if(client < 1 || client > MaxClients || !IsClientInGame(client))
+	int client = GetNativeCell(1);
+	
+	if (client < 1 || client > MaxClients || !IsClientInGame(client))
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "Bad player index %d", client);
 		return false;
 	}
 	
-	return g_hRecording[client] != INVALID_HANDLE;
+	return g_hRecording[client] != null;
 }
 
 public IsPlayerMimicing(Handle:plugin, numParams)
 {
-	new client = GetNativeCell(1);
-	if(client < 1 || client > MaxClients || !IsClientInGame(client))
+	int client = GetNativeCell(1);
+	
+	if (client < 1 || client > MaxClients || !IsClientInGame(client))
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "Bad player index %d", client);
 		return false;
 	}
 	
-	return g_hBotMimicsRecord[client] != INVALID_HANDLE;
+	return g_hBotMimicsRecord[client] != null;
 }
 
 public GetRecordPlayerMimics(Handle:plugin, numParams)
 {
-	new client = GetNativeCell(1);
-	if(client < 1 || client > MaxClients || !IsClientInGame(client))
+	int client = GetNativeCell(1);
+	
+	if (client < 1 || client > MaxClients || !IsClientInGame(client))
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "Bad player index %d", client);
 		return;
 	}
 	
-	if(!BotMimic_IsPlayerMimicing(client))
+	if (!BotMimic_IsPlayerMimicing(client))
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "Player is not mimicing.");
 		return;
 	}
 	
 	new iLen = GetNativeCell(3);
-	new String:sPath[iLen];
+	char[] sPath = new char[iLen];
 	GetFileFromFrameHandle(g_hBotMimicsRecord[client], sPath, iLen);
 	SetNativeString(2, sPath, iLen);
 }
 
 public GoToBookmark(Handle:plugin, numParams)
 {
-	new client = GetNativeCell(1);
-	if(client < 1 || client > MaxClients || !IsClientInGame(client))
+	int client = GetNativeCell(1);
+	
+	if (client < 1 || client > MaxClients || !IsClientInGame(client))
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "Bad player index %d", client);
 		return;
 	}
 	
-	if(!BotMimic_IsPlayerMimicing(client))
+	if (!BotMimic_IsPlayerMimicing(client))
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "Player is not mimicing.");
 		return;
 	}
 	
-	new String:sBookmarkName[MAX_BOOKMARK_NAME_LENGTH];
+	char sBookmarkName[MAX_BOOKMARK_NAME_LENGTH];
 	GetNativeString(2, sBookmarkName, sizeof(sBookmarkName));
 	
 	// Get the file header
-	new String:sPath[PLATFORM_MAX_PATH];
+	char sPath[PLATFORM_MAX_PATH];
 	GetFileFromFrameHandle(g_hBotMimicsRecord[client], sPath, sizeof(sPath));
 	
 	new iFileHeader[FileHeader];
-	GetTrieArray(g_hLoadedRecords, sPath, iFileHeader[0], _:FileHeader);
+	g_hLoadedRecords.GetArray(sPath, iFileHeader[0], _:FileHeader);
 	
 	// Get the bookmark with this name
 	new iBookmark[Bookmarks], bool:bBookmarkFound, iBookmarkIndex;
-	for(;iBookmarkIndex<iFileHeader[FH_bookmarkCount];iBookmarkIndex++)
+	for (;iBookmarkIndex<iFileHeader[FH_bookmarkCount];iBookmarkIndex++)
 	{
 		GetArrayArray(iFileHeader[FH_bookmarks], iBookmarkIndex, iBookmark[0], _:Bookmarks);
-		if(StrEqual(iBookmark[BKM_name], sBookmarkName, false))
+		if (StrEqual(iBookmark[BKM_name], sBookmarkName, false))
 		{
 			bBookmarkFound = true;
 			break;
 		}
 	}
 	
-	if(!bBookmarkFound)
+	if (!bBookmarkFound)
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "There is no bookmark named \"%s\" in this record.", sBookmarkName);
 		return;
@@ -1261,23 +1265,24 @@ public GoToBookmark(Handle:plugin, numParams)
 
 public StopPlayerMimic(Handle:plugin, numParams)
 {
-	new client = GetNativeCell(1);
-	if(client < 1 || client > MaxClients || !IsClientInGame(client))
+	int client = GetNativeCell(1);
+	
+	if (client < 1 || client > MaxClients || !IsClientInGame(client))
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "Bad player index %d", client);
 		return;
 	}
 	
-	if(!BotMimic_IsPlayerMimicing(client))
+	if (!BotMimic_IsPlayerMimicing(client))
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "Player is not mimicing.");
 		return;
 	}
 	
-	new String:sPath[PLATFORM_MAX_PATH];
+	char sPath[PLATFORM_MAX_PATH];
 	GetFileFromFrameHandle(g_hBotMimicsRecord[client], sPath, sizeof(sPath));
 	
-	g_hBotMimicsRecord[client] = INVALID_HANDLE;
+	g_hBotMimicsRecord[client] = null;
 	g_iBotMimicTick[client] = 0;
 	g_iCurrentAdditionalTeleportIndex[client] = 0;
 	g_iBotMimicRecordTickCount[client] = 0;
@@ -1286,12 +1291,12 @@ public StopPlayerMimic(Handle:plugin, numParams)
 	g_iBotMimicNextBookmarkTick[client][BWM_index] = -1;
 	
 	new iFileHeader[FileHeader];
-	GetTrieArray(g_hLoadedRecords, sPath, iFileHeader[0], _:FileHeader);
+	g_hLoadedRecords.GetArray(sPath, iFileHeader[0], _:FileHeader);
 	
 	SDKUnhook(client, SDKHook_WeaponCanSwitchTo, Hook_WeaponCanSwitchTo);
 	
-	new String:sCategory[64];
-	GetTrieString(g_hLoadedRecordsCategory, sPath, sCategory, sizeof(sCategory));
+	char sCategory[64];
+	g_hLoadedRecordsCategory.GetString(sPath, sCategory, sizeof(sCategory));
 	
 	Call_StartForward(g_hfwdOnPlayerStopsMimicing);
 	Call_PushCell(client);
@@ -1303,18 +1308,17 @@ public StopPlayerMimic(Handle:plugin, numParams)
 
 public PlayRecordFromFile(Handle:plugin, numParams)
 {
-	new client = GetNativeCell(1);
-	if(client < 1 || client > MaxClients || !IsClientInGame(client))
-	{
+	int client = GetNativeCell(1);
+	
+	if (client < 1 || client > MaxClients || !IsClientInGame(client))
 		return _:BM_BadClient;
-	}
 	
 	new iLen;
 	GetNativeStringLength(2, iLen);
-	decl String:sPath[iLen+1];
+	char[] sPath = new char[iLen+1];
 	GetNativeString(2, sPath, iLen+1);
 	
-	if(!FileExists(sPath))
+	if (!FileExists(sPath))
 		return _:BM_FileNotFound;
 	
 	int start = GetNativeCell(3);
@@ -1324,27 +1328,26 @@ public PlayRecordFromFile(Handle:plugin, numParams)
 
 public PlayRecordByName(Handle:plugin, numParams)
 {
-	new client = GetNativeCell(1);
-	if(client < 1 || client > MaxClients || !IsClientInGame(client))
-	{
+	int client = GetNativeCell(1);
+	
+	if (client < 1 || client > MaxClients || !IsClientInGame(client))
 		return _:BM_BadClient;
-	}
 	
 	new iLen;
 	GetNativeStringLength(2, iLen);
-	decl String:sName[iLen+1];
+	char[] sName = new char[iLen+1];
 	GetNativeString(2, sName, iLen+1);
 	
-	decl String:sPath[PLATFORM_MAX_PATH];
-	new iSize = GetArraySize(g_hSortedRecordList);
-	new iFileHeader[FileHeader], iRecentTimeStamp, String:sRecentPath[PLATFORM_MAX_PATH];
-	for(new i=0;i<iSize;i++)
+	char sPath[PLATFORM_MAX_PATH];
+	new iSize = g_hSortedRecordList.Length;
+	new iFileHeader[FileHeader], iRecentTimeStamp; char sRecentPath[PLATFORM_MAX_PATH];
+	for (int i=0;i<iSize;i++)
 	{
-		GetArrayString(g_hSortedRecordList, i, sPath, sizeof(sPath));
-		GetTrieArray(g_hLoadedRecords, sPath, iFileHeader[0], _:FileHeader);
-		if(StrEqual(sName, iFileHeader[FH_recordName]))
+		g_hSortedRecordList.GetString(i, sPath, sizeof(sPath));
+		g_hLoadedRecords.GetArray(sPath, iFileHeader[0], _:FileHeader);
+		if (StrEqual(sName, iFileHeader[FH_recordName]))
 		{
-			if(iRecentTimeStamp == 0 || iRecentTimeStamp < iFileHeader[FH_recordEndTime])
+			if (iRecentTimeStamp == 0 || iRecentTimeStamp < iFileHeader[FH_recordEndTime])
 			{
 				iRecentTimeStamp = iFileHeader[FH_recordEndTime];
 				strcopy(sRecentPath, sizeof(sRecentPath), sPath);
@@ -1352,7 +1355,7 @@ public PlayRecordByName(Handle:plugin, numParams)
 		}
 	}
 	
-	if(!iRecentTimeStamp || !FileExists(sRecentPath))
+	if (!iRecentTimeStamp || !FileExists(sRecentPath))
 		return _:BM_FileNotFound;
 	
 	int start = GetNativeCell(3);
@@ -1362,14 +1365,15 @@ public PlayRecordByName(Handle:plugin, numParams)
 
 public ResetPlayback(Handle:plugin, numParams)
 {
-	new client = GetNativeCell(1);
-	if(client < 1 || client > MaxClients || !IsClientInGame(client))
+	int client = GetNativeCell(1);
+	
+	if (client < 1 || client > MaxClients || !IsClientInGame(client))
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "Bad player index %d", client);
 		return;
 	}
 	
-	if(!BotMimic_IsPlayerMimicing(client))
+	if (!BotMimic_IsPlayerMimicing(client))
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "Player is not mimicing.");
 		return;
@@ -1387,22 +1391,20 @@ public GetFileHeaders(Handle:plugin, numParams)
 {
 	new iLen;
 	GetNativeStringLength(1, iLen);
-	decl String:sPath[iLen+1];
+	char[] sPath = new char[iLen+1];
 	GetNativeString(1, sPath, iLen+1);
 	
-	if(!FileExists(sPath))
-	{
+	if (!FileExists(sPath))
 		return _:BM_FileNotFound;
-	}
 	
 	new iFileHeader[FileHeader];
-	if(!GetTrieArray(g_hLoadedRecords, sPath, iFileHeader[0], _:FileHeader))
+	if (!g_hLoadedRecords.GetArray(sPath, iFileHeader[0], _:FileHeader))
 	{
-		decl String:sCategory[64];
-		if(!GetTrieString(g_hLoadedRecordsCategory, sPath, sCategory, sizeof(sCategory)))
+		char sCategory[64];
+		if (!g_hLoadedRecordsCategory.GetString(sPath, sCategory, sizeof(sCategory)))
 			strcopy(sCategory, sizeof(sCategory), DEFAULT_CATEGORY);
 		new BMError:error = LoadRecordFromFile(sPath, sCategory, iFileHeader, true, false);
-		if(error != BM_NoError)
+		if (error != BM_NoError)
 			return _:error;
 	}
 	
@@ -1417,9 +1419,9 @@ public GetFileHeaders(Handle:plugin, numParams)
 	
 	
 	new iSize = _:BMFileHeader;
-	if(numParams > 2)
+	if (numParams > 2)
 		iSize = GetNativeCell(3);
-	if(iSize > _:BMFileHeader)
+	if (iSize > _:BMFileHeader)
 		iSize = _:BMFileHeader;
 	
 	SetNativeArray(2, iExposedFileHeader[0], iSize);
@@ -1430,36 +1432,34 @@ public ChangeRecordName(Handle:plugin, numParams)
 {
 	new iLen;
 	GetNativeStringLength(1, iLen);
-	decl String:sPath[iLen+1];
+	char[] sPath = new char[iLen+1];
 	GetNativeString(1, sPath, iLen+1);
 	
-	if(!FileExists(sPath))
-	{
+	if (!FileExists(sPath))
 		return _:BM_FileNotFound;
-	}
 	
-	decl String:sCategory[64];
-	if(!GetTrieString(g_hLoadedRecordsCategory, sPath, sCategory, sizeof(sCategory)))
+	char sCategory[64];
+	if (!g_hLoadedRecordsCategory.GetString(sPath, sCategory, sizeof(sCategory)))
 		strcopy(sCategory, sizeof(sCategory), DEFAULT_CATEGORY);
 	
 	new iFileHeader[FileHeader];
-	if(!GetTrieArray(g_hLoadedRecords, sPath, iFileHeader[0], _:FileHeader))
+	if (!g_hLoadedRecords.GetArray(sPath, iFileHeader[0], _:FileHeader))
 	{
 		new BMError:error = LoadRecordFromFile(sPath, sCategory, iFileHeader, false, false);
-		if(error != BM_NoError)
+		if (error != BM_NoError)
 			return _:error;
 	}
 	
 	// Load the whole record first or we'd lose the frames!
-	if(iFileHeader[FH_frames] == INVALID_HANDLE)
+	if (iFileHeader[FH_frames] == null)
 		LoadRecordFromFile(sPath, sCategory, iFileHeader, false, true);
 	
 	GetNativeStringLength(2, iLen);
-	decl String:sName[iLen+1];
+	char[] sName = new char[iLen+1];
 	GetNativeString(2, sName, iLen+1);
 	
 	strcopy(iFileHeader[FH_recordName], MAX_RECORD_NAME_LENGTH, sName);
-	SetTrieArray(g_hLoadedRecords, sPath, iFileHeader[0], _:FileHeader);
+	g_hLoadedRecords.SetArray(sPath, iFileHeader[0], _:FileHeader);
 	
 	WriteRecordToDisk(sPath, iFileHeader);
 	
@@ -1480,12 +1480,12 @@ public GetFileCategory(Handle:plugin, numParams)
 {
 	new iLen;
 	GetNativeStringLength(1, iLen);
-	decl String:sPath[iLen+1];
+	char[] sPath = new char[iLen+1];
 	GetNativeString(1, sPath, iLen+1);
 	
 	iLen = GetNativeCell(3);
-	new String:sCategory[iLen];
-	new bool:bFound = GetTrieString(g_hLoadedRecordsCategory, sPath, sCategory, iLen);
+	char[] sCategory = new char[iLen];
+	bool bFound = g_hLoadedRecordsCategory.GetString(sPath, sCategory, iLen);
 	
 	SetNativeString(2, sCategory, iLen);
 	return _:bFound;
@@ -1495,28 +1495,26 @@ public GetRecordBookmarks(Handle:plugin, numParams)
 {
 	new iLen;
 	GetNativeStringLength(1, iLen);
-	decl String:sPath[iLen+1];
+	char[] sPath = new char[iLen+1];
 	GetNativeString(1, sPath, iLen+1);
 	
-	if(!FileExists(sPath))
-	{
+	if (!FileExists(sPath))
 		return _:BM_FileNotFound;
-	}
 	
 	new iFileHeader[FileHeader];
-	if(!GetTrieArray(g_hLoadedRecords, sPath, iFileHeader[0], _:FileHeader))
+	if (!g_hLoadedRecords.GetArray(sPath, iFileHeader[0], _:FileHeader))
 	{
-		decl String:sCategory[64];
-		if(!GetTrieString(g_hLoadedRecordsCategory, sPath, sCategory, sizeof(sCategory)))
+		char sCategory[64];
+		if (!g_hLoadedRecordsCategory.GetString(sPath, sCategory, sizeof(sCategory)))
 			strcopy(sCategory, sizeof(sCategory), DEFAULT_CATEGORY);
 		new BMError:error = LoadRecordFromFile(sPath, sCategory, iFileHeader, true, false);
-		if(error != BM_NoError)
+		if (error != BM_NoError)
 			return _:error;
 	}
 	
 	new Handle:hBookmarks = CreateArray(ByteCountToCells(MAX_BOOKMARK_NAME_LENGTH));
 	new iBookmark[Bookmarks];
-	for(new i=0;i<iFileHeader[FH_bookmarkCount];i++)
+	for (int i=0;i<iFileHeader[FH_bookmarkCount];i++)
 	{
 		GetArrayArray(iFileHeader[FH_bookmarks], i, iBookmark[0], _:Bookmarks);
 		PushArrayString(hBookmarks, iBookmark[BKM_name]);
@@ -1531,27 +1529,27 @@ public GetRecordBookmarks(Handle:plugin, numParams)
  * Helper functions
  */
 
-ParseRecordsInDirectory(const String:sPath[], const String:sCategory[], bool:subdir)
+ParseRecordsInDirectory(const char[] sPath, const char[] sCategory, bool subdir)
 {
-	decl String:sMapFilePath[PLATFORM_MAX_PATH];
+	char sMapFilePath[PLATFORM_MAX_PATH];
 	// We already are in the map folder? Don't add it again!
-	if(subdir)
-	{
+	if (subdir)
 		strcopy(sMapFilePath, sizeof(sMapFilePath), sPath);
-	}
 	// We're in a category. add the mapname to load the correct records for the current map
 	else
 	{
-		decl String:sMapName[64];
+		char sMapName[64];
 		GetCurrentMap(sMapName, sizeof(sMapName));
 		Format(sMapFilePath, sizeof(sMapFilePath), "%s/%s", sPath, sMapName);
 	}
 	
-	new Handle:hDir = OpenDirectory(sMapFilePath);
-	if(hDir == INVALID_HANDLE)
+	Handle hDir = OpenDirectory(sMapFilePath);
+	
+	if (hDir == null)
 		return;
 	
-	new String:sFile[64], FileType:fileType, String:sFilePath[PLATFORM_MAX_PATH], iFileHeader[FileHeader];
+	char sFile[64]; FileType fileType; char sFilePath[PLATFORM_MAX_PATH];
+	new iFileHeader[FileHeader];
 	while(ReadDirEntry(hDir, sFile, sizeof(sFile), fileType))
 	{
 		switch(fileType)
@@ -1566,22 +1564,23 @@ ParseRecordsInDirectory(const String:sPath[], const String:sCategory[], bool:sub
 			case FileType_Directory:
 			{
 				// INFINITE RECURSION ANYONE?
-				if(StrEqual(sFile, ".") || StrEqual(sFile, ".."))
+				if (StrEqual(sFile, ".") || StrEqual(sFile, ".."))
 					continue;
 				
 				Format(sFilePath, sizeof(sFilePath), "%s/%s", sMapFilePath, sFile);
 				ParseRecordsInDirectory(sFilePath, sCategory, true);
 			}
 		}
-		
 	}
-	CloseHandle(hDir);
+	
+	delete hDir;
 }
 
-WriteRecordToDisk(const String:sPath[], iFileHeader[FileHeader])
+WriteRecordToDisk(const char[] sPath, iFileHeader[FileHeader])
 {
-	new Handle:hFile = OpenFile(sPath, "wb");
-	if(hFile == INVALID_HANDLE)
+	Handle hFile = OpenFile(sPath, "wb");
+	
+	if (hFile == null)
 	{
 		LogError("Can't open the record file for writing! (%s)", sPath);
 		return;
@@ -1597,7 +1596,7 @@ WriteRecordToDisk(const String:sPath[], iFileHeader[FileHeader])
 	WriteFile(hFile, _:iFileHeader[FH_initialAngles], 2, 4);
 	
 	new Handle:hAdditionalTeleport, iATIndex;
-	GetTrieValue(g_hLoadedRecordsAdditionalTeleport, sPath, hAdditionalTeleport);
+	g_hLoadedRecordsAdditionalTeleport.GetValue(sPath, hAdditionalTeleport);
 	
 	new iTickCount = iFileHeader[FH_tickCount];
 	WriteFileCell(hFile, iTickCount, 4);
@@ -1609,7 +1608,7 @@ WriteRecordToDisk(const String:sPath[], iFileHeader[FileHeader])
 	new Handle:hBookmarks = iFileHeader[FH_bookmarks];
 	
 	new iBookmark[Bookmarks];
-	for(new i=0;i<iBookmarkCount;i++)
+	for (int i=0;i<iBookmarkCount;i++)
 	{
 		GetArrayArray(hBookmarks, i, iBookmark[0], _:Bookmarks);
 		
@@ -1619,54 +1618,56 @@ WriteRecordToDisk(const String:sPath[], iFileHeader[FileHeader])
 	}
 	
 	new iFrame[FrameInfo];
-	for(new i=0;i<iTickCount;i++)
+	for (int i=0;i<iTickCount;i++)
 	{
 		GetArrayArray(iFileHeader[FH_frames], i, iFrame[0], _:FrameInfo);
 		WriteFile(hFile, iFrame[0], _:FrameInfo, 4);
 		
 		// Handle the optional Teleport call
-		if(hAdditionalTeleport != INVALID_HANDLE && iFrame[additionalFields] & (ADDITIONAL_FIELD_TELEPORTED_ORIGIN|ADDITIONAL_FIELD_TELEPORTED_ANGLES|ADDITIONAL_FIELD_TELEPORTED_VELOCITY))
+		if (hAdditionalTeleport != null && iFrame[additionalFields] & (ADDITIONAL_FIELD_TELEPORTED_ORIGIN|ADDITIONAL_FIELD_TELEPORTED_ANGLES|ADDITIONAL_FIELD_TELEPORTED_VELOCITY))
 		{
 			new iAT[AdditionalTeleport];
 			GetArrayArray(hAdditionalTeleport, iATIndex, iAT[0], _:AdditionalTeleport);
-			if(iFrame[additionalFields] & ADDITIONAL_FIELD_TELEPORTED_ORIGIN)
+			if (iFrame[additionalFields] & ADDITIONAL_FIELD_TELEPORTED_ORIGIN)
 				WriteFile(hFile, _:iAT[atOrigin], 3, 4);
-			if(iFrame[additionalFields] & ADDITIONAL_FIELD_TELEPORTED_ANGLES)
+			if (iFrame[additionalFields] & ADDITIONAL_FIELD_TELEPORTED_ANGLES)
 				WriteFile(hFile, _:iAT[atAngles], 3, 4);
-			if(iFrame[additionalFields] & ADDITIONAL_FIELD_TELEPORTED_VELOCITY)
+			if (iFrame[additionalFields] & ADDITIONAL_FIELD_TELEPORTED_VELOCITY)
 				WriteFile(hFile, _:iAT[atVelocity], 3, 4);
 			iATIndex++;
 		}
 	}
 	
-	CloseHandle(hFile);
+	delete hFile;
 }
 
-BMError:LoadRecordFromFile(const String:path[], const String:sCategory[], headerInfo[FileHeader], bool:onlyHeader, bool:forceReload)
+BMError:LoadRecordFromFile(const char[] path, const char[] sCategory, headerInfo[FileHeader], bool onlyHeader, bool forceReload)
 {
-	if(!FileExists(path))
+	if (!FileExists(path))
 		return BM_FileNotFound;
 	
 	// Already loaded that file?
-	new bool:bAlreadyLoaded = false;
-	if(GetTrieArray(g_hLoadedRecords, path, headerInfo[0], _:FileHeader))
+	bool bAlreadyLoaded;
+	if (g_hLoadedRecords.GetArray(path, headerInfo[0], _:FileHeader))
 	{
 		// Header already loaded.
-		if(onlyHeader && !forceReload)
+		if (onlyHeader && !forceReload)
 			return BM_NoError;
 		
 		bAlreadyLoaded = true;
 	}
 	
-	new Handle:hFile = OpenFile(path, "rb");
-	if(hFile == INVALID_HANDLE)
+	Handle hFile = OpenFile(path, "rb");
+	
+	if (hFile == null)
 		return BM_FileNotFound;
 	
 	new iMagic;
 	ReadFileCell(hFile, iMagic, 4);
-	if(iMagic != BM_MAGIC)
+	
+	if (iMagic != BM_MAGIC)
 	{
-		CloseHandle(hFile);
+		delete hFile;
 		return BM_BadFile;
 	}
 	
@@ -1674,16 +1675,16 @@ BMError:LoadRecordFromFile(const String:path[], const String:sCategory[], header
 	ReadFileCell(hFile, iBinaryFormatVersion, 1);
 	headerInfo[FH_binaryFormatVersion] = iBinaryFormatVersion;
 	
-	if(iBinaryFormatVersion > BINARY_FORMAT_VERSION)
+	if (iBinaryFormatVersion > BINARY_FORMAT_VERSION)
 	{
-		CloseHandle(hFile);
+		delete hFile;
 		return BM_NewerBinaryVersion;
 	}
 	
 	new iRecordTime, iNameLength;
 	ReadFileCell(hFile, iRecordTime, 4);
 	ReadFileCell(hFile, iNameLength, 1);
-	decl String:sRecordName[iNameLength+1];
+	char[] sRecordName = new char[iNameLength+1];
 	ReadFileString(hFile, sRecordName, iNameLength+1, iNameLength);
 	sRecordName[iNameLength] = '\0';
 	
@@ -1694,17 +1695,17 @@ BMError:LoadRecordFromFile(const String:path[], const String:sCategory[], header
 	ReadFileCell(hFile, iTickCount, 4);
 	
 	new iBookmarkCount;
-	if(iBinaryFormatVersion >= 0x02)
-	{
+	
+	if (iBinaryFormatVersion >= 0x02)
 		ReadFileCell(hFile, iBookmarkCount, 4);
-	}
+	
 	headerInfo[FH_bookmarkCount] = iBookmarkCount;
 	
 	headerInfo[FH_recordEndTime] = iRecordTime;
 	strcopy(headerInfo[FH_recordName], MAX_RECORD_NAME_LENGTH, sRecordName);
 	headerInfo[FH_tickCount] = iTickCount;
 
-	headerInfo[FH_frames] = INVALID_HANDLE;
+	headerInfo[FH_frames] = null;
 	
 	//PrintToServer("Record %s:", sRecordName);
 	//PrintToServer("File %s:", path);
@@ -1714,7 +1715,7 @@ BMError:LoadRecordFromFile(const String:path[], const String:sCategory[], header
 	new Handle:hBookmarks = CreateArray(_:Bookmarks);
 	
 	new iBookmark[Bookmarks];
-	for(new i=0;i<iBookmarkCount;i++)
+	for (int i=0;i<iBookmarkCount;i++)
 	{
 		ReadFileCell(hFile, iBookmark[BKM_frame], 4);
 		ReadFileCell(hFile, iBookmark[BKM_additionalTeleportTick], 4);
@@ -1724,21 +1725,21 @@ BMError:LoadRecordFromFile(const String:path[], const String:sCategory[], header
 	
 	headerInfo[FH_bookmarks] = hBookmarks;
 	
-	SetTrieArray(g_hLoadedRecords, path, headerInfo[0], _:FileHeader);
-	SetTrieString(g_hLoadedRecordsCategory, path, sCategory);
+	g_hLoadedRecords.SetArray(path, headerInfo[0], _:FileHeader);
+	g_hLoadedRecordsCategory.SetString(path, sCategory);
 	
-	if(!bAlreadyLoaded)
-		PushArrayString(g_hSortedRecordList, path);
+	if (!bAlreadyLoaded)
+		g_hSortedRecordList.PushString(path);
 	
-	if(FindStringInArray(g_hSortedCategoryList, sCategory) == -1)
-		PushArrayString(g_hSortedCategoryList, sCategory);
+	if (g_hSortedCategoryList.FindString(sCategory) == -1)
+		g_hSortedCategoryList.PushString(sCategory);
 	
 	// Sort it by record end time
 	SortRecordList();
 	
-	if(onlyHeader)
+	if (onlyHeader)
 	{
-		CloseHandle(hFile);
+		delete hFile;
 		return BM_NoError;
 	}
 	
@@ -1747,20 +1748,24 @@ BMError:LoadRecordFromFile(const String:path[], const String:sCategory[], header
 	new Handle:hAdditionalTeleport = CreateArray(_:AdditionalTeleport);
 	
 	new iFrame[FrameInfo];
-	for(new i=0;i<iTickCount;i++)
+	for (int i=0;i<iTickCount;i++)
 	{
 		ReadFile(hFile, iFrame[0], _:FrameInfo, 4);
 		PushArrayArray(hRecordFrames, iFrame[0], _:FrameInfo);
 		
-		if(iFrame[additionalFields] & (ADDITIONAL_FIELD_TELEPORTED_ORIGIN|ADDITIONAL_FIELD_TELEPORTED_ANGLES|ADDITIONAL_FIELD_TELEPORTED_VELOCITY))
+		if (iFrame[additionalFields] & (ADDITIONAL_FIELD_TELEPORTED_ORIGIN|ADDITIONAL_FIELD_TELEPORTED_ANGLES|ADDITIONAL_FIELD_TELEPORTED_VELOCITY))
 		{
 			new iAT[AdditionalTeleport];
-			if(iFrame[additionalFields] & ADDITIONAL_FIELD_TELEPORTED_ORIGIN)
+			
+			if (iFrame[additionalFields] & ADDITIONAL_FIELD_TELEPORTED_ORIGIN)
 				ReadFile(hFile, _:iAT[atOrigin], 3, 4);
-			if(iFrame[additionalFields] & ADDITIONAL_FIELD_TELEPORTED_ANGLES)
+			
+			if (iFrame[additionalFields] & ADDITIONAL_FIELD_TELEPORTED_ANGLES)
 				ReadFile(hFile, _:iAT[atAngles], 3, 4);
-			if(iFrame[additionalFields] & ADDITIONAL_FIELD_TELEPORTED_VELOCITY)
+			
+			if (iFrame[additionalFields] & ADDITIONAL_FIELD_TELEPORTED_VELOCITY)
 				ReadFile(hFile, _:iAT[atVelocity], 3, 4);
+			
 			iAT[atFlags] = iFrame[additionalFields] & (ADDITIONAL_FIELD_TELEPORTED_ORIGIN|ADDITIONAL_FIELD_TELEPORTED_ANGLES|ADDITIONAL_FIELD_TELEPORTED_VELOCITY);
 			PushArrayArray(hAdditionalTeleport, iAT[0], _:AdditionalTeleport);
 		}
@@ -1768,11 +1773,11 @@ BMError:LoadRecordFromFile(const String:path[], const String:sCategory[], header
 	
 	headerInfo[FH_frames] = hRecordFrames;
 	
-	SetTrieArray(g_hLoadedRecords, path, headerInfo[0], _:FileHeader);
-	if(GetArraySize(hAdditionalTeleport) > 0)
-		SetTrieValue(g_hLoadedRecordsAdditionalTeleport, path, hAdditionalTeleport);
+	g_hLoadedRecords.SetArray(path, headerInfo[0], _:FileHeader);
+	if (GetArraySize(hAdditionalTeleport) > 0)
+		g_hLoadedRecordsAdditionalTeleport.SetValue(path, hAdditionalTeleport);
 	
-	CloseHandle(hFile);
+	delete hFile;
 	return BM_NoError;
 }
 
@@ -1784,36 +1789,37 @@ SortRecordList()
 
 public SortFuncADT_ByEndTime(index1, index2, Handle:array, Handle:hndl)
 {
-	new String:path1[PLATFORM_MAX_PATH], String:path2[PLATFORM_MAX_PATH];
+	char path1[PLATFORM_MAX_PATH]; char path2[PLATFORM_MAX_PATH];
 	GetArrayString(array, index1, path1, sizeof(path1));
 	GetArrayString(array, index2, path2, sizeof(path2));
 	
 	new header1[FileHeader], header2[FileHeader];
-	GetTrieArray(g_hLoadedRecords, path1, header1[0], _:FileHeader);
-	GetTrieArray(g_hLoadedRecords, path2, header2[0], _:FileHeader);
+	g_hLoadedRecords.GetArray(path1, header1[0], _:FileHeader);
+	g_hLoadedRecords.GetArray(path2, header2[0], _:FileHeader);
 	
 	return header1[FH_recordEndTime] - header2[FH_recordEndTime];
 }
 
-BMError:PlayRecord(client, const String:path[], int start = 0)
+BMError:PlayRecord(int client, const char[] path, int start = 0)
 {
 	// He's currently recording. Don't start to play some record on him at the same time.
-	if(g_hRecording[client] != INVALID_HANDLE)
-	{
+	if (g_hRecording[client] != null)
 		return BM_BadClient;
-	}
 	
 	new iFileHeader[FileHeader];
-	GetTrieArray(g_hLoadedRecords, path, iFileHeader[0], _:FileHeader);
+	g_hLoadedRecords.GetArray(path, iFileHeader[0], _:FileHeader);
 	
 	// That record isn't fully loaded yet. Do that now.
-	if(iFileHeader[FH_frames] == INVALID_HANDLE)
+	if (iFileHeader[FH_frames] == null)
 	{
-		decl String:sCategory[64];
-		if(!GetTrieString(g_hLoadedRecordsCategory, path, sCategory, sizeof(sCategory)))
+		char sCategory[64];
+		
+		if (!g_hLoadedRecordsCategory.GetString(path, sCategory, sizeof(sCategory)))
 			strcopy(sCategory, sizeof(sCategory), DEFAULT_CATEGORY);
+		
 		new BMError:error = LoadRecordFromFile(path, sCategory, iFileHeader, false, true);
-		if(error != BM_NoError)
+		
+		if (error != BM_NoError)
 			return error;
 	}
 	
@@ -1836,13 +1842,13 @@ BMError:PlayRecord(client, const String:path[], int start = 0)
 	SDKHook(client, SDKHook_WeaponCanSwitchTo, Hook_WeaponCanSwitchTo);
 	
 	// Respawn him to get him moving!
-	if(IsClientInGame(client) && !IsPlayerAlive(client) && GetClientTeam(client) >= CS_TEAM_T)
+	if (IsClientInGame(client) && !IsPlayerAlive(client) && GetClientTeam(client) >= CS_TEAM_T)
 		CS_RespawnPlayer(client);
 	
-	new String:sCategory[64];
-	GetTrieString(g_hLoadedRecordsCategory, path, sCategory, sizeof(sCategory));
+	char sCategory[64];
+	g_hLoadedRecordsCategory.GetString(path, sCategory, sizeof(sCategory));
 	
-	new Action:result;
+	Action result;
 	Call_StartForward(g_hfwdOnPlayerStartsMimicing);
 	Call_PushCell(client);
 	Call_PushString(iFileHeader[FH_recordName]);
@@ -1851,9 +1857,9 @@ BMError:PlayRecord(client, const String:path[], int start = 0)
 	Call_Finish(result);
 	
 	// Someone doesn't want this guy to play that record.
-	if(result >= Plugin_Handled)
+	if (result >= Plugin_Handled)
 	{
-		g_hBotMimicsRecord[client] = INVALID_HANDLE;
+		g_hBotMimicsRecord[client] = null;
 		g_iBotMimicRecordTickCount[client] = 0;
 		g_iBotMimicNextBookmarkTick[client][BWM_frame] = -1;
 		g_iBotMimicNextBookmarkTick[client][BWM_index] = -1;
@@ -1866,57 +1872,63 @@ BMError:PlayRecord(client, const String:path[], int start = 0)
 UpdateNextBookmarkTick(client)
 {
 	// Not mimicing anything.
-	if(g_hBotMimicsRecord[client] == INVALID_HANDLE)
+	if (g_hBotMimicsRecord[client] == null)
 		return;
 	
-	new String:sPath[PLATFORM_MAX_PATH];
+	char sPath[PLATFORM_MAX_PATH];
 	GetFileFromFrameHandle(g_hBotMimicsRecord[client], sPath, sizeof(sPath));
-	new iFileHeader[FileHeader];
-	GetTrieArray(g_hLoadedRecords, sPath, iFileHeader[0], _:FileHeader);
 	
-	if(iFileHeader[FH_bookmarks] == INVALID_HANDLE)
+	new iFileHeader[FileHeader];
+	g_hLoadedRecords.GetArray(sPath, iFileHeader[0], _:FileHeader);
+	
+	if (iFileHeader[FH_bookmarks] == null)
 		return;
 	
 	new iSize = GetArraySize(iFileHeader[FH_bookmarks]);
-	if(iSize == 0)
+	
+	if (iSize == 0)
 		return;
 	
 	new iCurrentIndex = g_iBotMimicNextBookmarkTick[client][BWM_index];
 	// We just reached some bookmark regularly and want to proceed to wait for the next one sequentially.
 	// If there is no further bookmarks, restart from the first one.
 	iCurrentIndex++;
-	if(iCurrentIndex >= iSize)
+	if (iCurrentIndex >= iSize)
 		iCurrentIndex = 0;
 	
 	new iBookmark[Bookmarks];
 	GetArrayArray(iFileHeader[FH_bookmarks], iCurrentIndex, iBookmark[0], _:Bookmarks);
+	
 	g_iBotMimicNextBookmarkTick[client][BWM_frame] = iBookmark[BKM_frame];
 	g_iBotMimicNextBookmarkTick[client][BWM_index] = iCurrentIndex;
 }
 
-stock bool:CheckCreateDirectory(const String:sPath[], mode)
+stock bool:CheckCreateDirectory(const char[] sPath, mode)
 {
-	if(!DirExists(sPath))
+	if (!DirExists(sPath))
 	{
 		CreateDirectory(sPath, mode);
-		if(!DirExists(sPath))
+		
+		if (!DirExists(sPath))
 		{
 			LogError("Can't create a new directory. Please create one manually! (%s)", sPath);
 			return false;
 		}
 	}
+	
 	return true;
 }
 
-stock GetFileFromFrameHandle(Handle:frames, String:path[], maxlen)
+stock GetFileFromFrameHandle(Handle:frames, char[] path, maxlen)
 {
-	new iSize = GetArraySize(g_hSortedRecordList);
-	decl String:sPath[PLATFORM_MAX_PATH], iFileHeader[FileHeader];
-	for(new i=0;i<iSize;i++)
+	new iSize = g_hSortedRecordList.Length;
+	char sPath[PLATFORM_MAX_PATH];
+	new iFileHeader[FileHeader];
+	for (int i=0;i<iSize;i++)
 	{
-		GetArrayString(g_hSortedRecordList, i, sPath, sizeof(sPath));
-		GetTrieArray(g_hLoadedRecords, sPath, iFileHeader[0], _:FileHeader);
-		if(iFileHeader[FH_frames] != frames)
+		g_hSortedRecordList.GetString(i, sPath, sizeof(sPath));
+		g_hLoadedRecords.GetArray(sPath, iFileHeader[0], _:FileHeader);
+		if (iFileHeader[FH_frames] != frames)
 			continue;
 		
 		strcopy(path, maxlen, sPath);
